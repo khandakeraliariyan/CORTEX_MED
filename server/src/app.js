@@ -2,26 +2,34 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
-require("dotenv").config();
+
+const config = require("./app/config");
+
+const routes = require("./app/routes");
+
+const globalErrorHandler = require("./app/middlewares/globalErrorHandler");
+
+const notFound = require("./app/middlewares/notFound");
 
 const app = express();
 
 app.use(
     cors({
-        origin: process.env.CLIENT_URL,
+        origin: config.client_url,
         credentials: true,
     })
 );
 
 app.use(express.json());
+
 app.use(cookieParser());
+
 app.use(morgan("dev"));
 
-app.get("/api/v1/health", (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: "Qura Server Running",
-    });
-});
+app.use("/api/v1", routes);
+
+app.use(notFound);
+
+app.use(globalErrorHandler);
 
 module.exports = app;
