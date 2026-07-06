@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+const { DOCTOR_STATUS } = require("./doctor.constant");
+
 const doctorSchema = new mongoose.Schema(
     {
         user: {
@@ -9,19 +11,22 @@ const doctorSchema = new mongoose.Schema(
             unique: true,
         },
 
-        specialty: {
-            type: String,
-            required: true,
-        },
-
         department: {
             type: String,
             required: true,
+            trim: true,
         },
 
-        roomNumber: {
+        specialty: {
             type: String,
             required: true,
+            trim: true,
+        },
+
+        room: {
+            type: String,
+            required: true,
+            trim: true,
         },
 
         consultationFee: {
@@ -29,7 +34,7 @@ const doctorSchema = new mongoose.Schema(
             default: 0,
         },
 
-        averageConsultationTime: {
+        avgConsultationTime: {
             type: Number,
             default: 15,
         },
@@ -40,18 +45,20 @@ const doctorSchema = new mongoose.Schema(
             },
         ],
 
-        startTime: String,
+        startTime: {
+            type: String,
+            required: true,
+        },
 
-        endTime: String,
+        endTime: {
+            type: String,
+            required: true,
+        },
 
         status: {
             type: String,
-            enum: [
-                "available",
-                "busy",
-                "offline",
-            ],
-            default: "available",
+            enum: Object.values(DOCTOR_STATUS),
+            default: DOCTOR_STATUS.AVAILABLE,
         },
     },
     {
