@@ -10,4 +10,6 @@ const { registerValidation } = require("./auth.validation");
 
 router.post("/register", validateRequest(registerValidation), AuthController.register);
 
+router.post("/login", validateRequest(loginValidation), AuthController.login);
+
 module.exports = router;

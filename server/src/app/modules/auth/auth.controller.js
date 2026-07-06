@@ -13,6 +13,17 @@ const register = catchAsync(async (req, res) => {
     });
 });
 
+const login = catchAsync(async (req, res) => {
+    const result = await AuthService.loginUser(req.body);
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Login successful",
+        data: result,
+    });
+});
+
 module.exports = {
     register,
+    login,
 };
