@@ -1,59 +1,49 @@
 const axios = require("axios");
 
-const Triage = require("./triage.model");
-
 const Appointment = require("../appointment/appointment.model");
+
+const Triage = require("./triage.model");
 
 const AppError = require("../../errors/AppError");
 
-const runTriage = async (appointmentId) => {
+const runTriage = async (id) => {
 
-    const appointment =
-        await Appointment.findById(
-            appointmentId
-        );
+    const appointment = await Appointment.findById(id);
 
     if (!appointment) {
+
         throw new AppError(
             404,
             "Appointment not found"
         );
+
     }
 
-    const response =
-        await axios.post(
-            process.env.AI_URL + "/triage",
-            {
-                symptoms:
-                    appointment.symptoms
-            }
-        );
+    const response = await axios.post("http://localhost:8000/triage",
+        {
 
-    const triage =
-        await Triage.create({
+            symptoms:
+                appointment.symptoms
 
-            appointment: appointment._id,
+        }
+    );
 
-            symptoms: appointment.symptoms,
+    const result = response.data;
 
-            priority:
-                response.data.priority,
+    return await Triage.create({
 
-            reason:
-                response.data.reason,
+        appointment: id,
 
-            confidence:
-                response.data.confidence,
+        priority: result.priority,
 
-            latency:
-                response.data.latency
+        reason: result.reason,
 
-        });
+        confidence: result.confidence
 
-    return triage;
+    });
 
 };
 
 module.exports = {
     runTriage
-}
+};
