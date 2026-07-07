@@ -6,6 +6,10 @@ const auth = require("../../middlewares/auth");
 
 const QueueController = require("./queue.controller");
 
-router.get("/:doctorId", auth("doctor", "receptionist", "admin"), QueueController.getQueue);
+router.get("/:doctorId", auth("admin", "doctor", "receptionist"), QueueController.getQueue);
+
+router.patch("/call-next/:doctorId", auth("doctor"), QueueController.callNextPatient);
+
+router.patch("/complete/:appointmentId", auth("doctor"), QueueController.completePatient);
 
 module.exports = router;
