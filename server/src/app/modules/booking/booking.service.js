@@ -6,18 +6,9 @@ const WaitTimeService = require("../wait-time/waitTime.service");
 const bookPatient = async (payload) => {
     const appointment = await AppointmentService.createAppointment(payload);
 
-    const triage = await TriageService.runTriage(
-        appointment._id
-    );
+    const triage = await TriageService.runTriage(appointment._id);
 
-    const queue = await QueueService.insertPatient(
-        appointment,
-        triage
-    );
-
-    await WaitTimeService.recalculateQueue(
-        appointment.doctor
-    );
+    await WaitTimeService.recalculateQueue(appointment.doctor);
 
     return {
         appointment,
