@@ -1,24 +1,21 @@
-const Queue = require("./queue.model");
+const Appointment = require("../appointment/appointment.model");
 
-const insertPatient = async (appointment, triage) => {
-    return await Queue.create({
+const getDoctorQueue = async (doctorId) => {
 
-        doctor:
-            appointment.doctor,
+    const queue = await Appointment.find({
+        doctor: doctorId,
+        status: "waiting"
+    })
 
-        appointment:
-            appointment._id,
+        .sort({
+            priority: 1,
+            tokenNumber: 1
+        });
 
-        priority:
-            triage.priority,
-
-        tokenNumber:
-            appointment.tokenNumber
-
-    });
+    return queue;
 
 };
 
 module.exports = {
-    insertPatient
+    getDoctorQueue
 };
