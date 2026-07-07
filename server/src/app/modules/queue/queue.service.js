@@ -5,6 +5,8 @@ const AppError = require("../../errors/AppError");
 
 const WaitTimeService = require("../wait-time/waitTime.service");
 
+const NotificationService = require("../notification/notification.service");
+
 const getDoctorQueue = async (doctorId) => {
     return await Appointment.find({
         doctor: doctorId,
@@ -38,6 +40,12 @@ const callNextPatient = async (doctorId) => {
     // Recalculate wait time for remaining patients
     await WaitTimeService.recalculateQueue(doctorId);
 
+    NotificationService.patientCalled(nextPatient);
+
+    NotificationService.queueUpdated(doctorId);
+
+    NotificationService.waitUpdated(doctorId);
+
     return nextPatient;
 };
 
@@ -55,6 +63,12 @@ const completePatient = async (appointmentId) => {
 
     // Recalculate queue after completion
     await WaitTimeService.recalculateQueue(patient.doctor);
+
+    NotificationService.patientCompleted(patient);
+
+    NotificationService.queueUpdated(patient.doctor);
+
+    NotificationService.waitUpdated(patient.doctor);
 
     return patient;
 };

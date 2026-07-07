@@ -9,6 +9,8 @@ const generateTokenNumber = require("../../utils/generateTokenNumber");
 const TriageService = require("../triage/triage.service");
 const WaitTimeService = require("../wait-time/waitTime.service");
 
+const NotificationService = require("../notification/notification.service");
+
 const createAppointment = async (payload) => {
     // Check doctor exists
     const doctor = await Doctor.findById(payload.doctor);
@@ -36,6 +38,14 @@ const createAppointment = async (payload) => {
 
     // Update everyone's wait time
     await WaitTimeService.recalculateQueue(
+        appointment.doctor
+    );
+
+    NotificationService.queueUpdated(
+        appointment.doctor
+    );
+
+    NotificationService.waitUpdated(
         appointment.doctor
     );
 
