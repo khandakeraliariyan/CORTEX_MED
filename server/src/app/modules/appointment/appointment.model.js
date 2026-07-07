@@ -104,6 +104,35 @@ const appointmentSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+
+        priority: {
+            type: Number,
+            default: 5,
+        },
+
+        triageReason: {
+            type: String,
+            default: null,
+        },
+
+        triageConfidence: {
+            type: Number,
+            default: null,
+        },
+
+        estimatedWait: {
+            type: Number,
+            default: 0,
+        },
+
+        calledAt: {
+            type: Date,
+        },
+
+        completedAt: {
+            type: Date,
+        },
+        
     },
     {
         timestamps: true,
