@@ -11,6 +11,7 @@ router.use("/auth", authRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/appointments", appointmentRoutes);
 router.use("/triage", triageRoutes);
+router.use("/booking", bookingRoutes);
 
 router.get("/", (req, res) => {
     res.json({
