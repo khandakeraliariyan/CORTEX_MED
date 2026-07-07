@@ -24,6 +24,7 @@ const appointmentSchema = new mongoose.Schema(
         phone: {
             type: String,
             required: true,
+            trim: true,
         },
 
         doctor: {
@@ -35,11 +36,13 @@ const appointmentSchema = new mongoose.Schema(
         symptoms: {
             type: String,
             required: true,
+            trim: true,
         },
 
         appointmentCode: {
             type: String,
             unique: true,
+            required: true,
         },
 
         tokenNumber: {
@@ -49,7 +52,31 @@ const appointmentSchema = new mongoose.Schema(
 
         priority: {
             type: Number,
+            min: 1,
+            max: 5,
             default: 5,
+        },
+
+        triageReason: {
+            type: String,
+            default: null,
+        },
+
+        triageConfidence: {
+            type: Number,
+            min: 0,
+            max: 1,
+            default: null,
+        },
+
+        aiModel: {
+            type: String,
+            default: null,
+        },
+
+        triagedAt: {
+            type: Date,
+            default: null,
         },
 
         estimatedWait: {
@@ -62,13 +89,54 @@ const appointmentSchema = new mongoose.Schema(
             enum: Object.values(APPOINTMENT_STATUS),
             default: APPOINTMENT_STATUS.WAITING,
         },
+
+        calledAt: {
+            type: Date,
+            default: null,
+        },
+
+        completedAt: {
+            type: Date,
+            default: null,
+        },
+
+        notes: {
+            type: String,
+            default: "",
+        },
+
+        priority: {
+            type: Number,
+            default: 5,
+        },
+
+        triageReason: {
+            type: String,
+            default: null,
+        },
+
+        triageConfidence: {
+            type: Number,
+            default: null,
+        },
+
+        estimatedWait: {
+            type: Number,
+            default: 0,
+        },
+
+        calledAt: {
+            type: Date,
+        },
+
+        completedAt: {
+            type: Date,
+        },
+        
     },
     {
         timestamps: true,
     }
 );
 
-module.exports = mongoose.model(
-    "Appointment",
-    appointmentSchema
-);
+module.exports = mongoose.model("Appointment", appointmentSchema);
