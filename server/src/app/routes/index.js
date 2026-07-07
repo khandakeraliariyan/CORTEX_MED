@@ -11,7 +11,6 @@ router.use("/auth", authRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/appointments", appointmentRoutes);
 router.use("/triage", triageRoutes);
-router.use("/booking", bookingRoutes);
 router.use("/queue", queueRoutes);
 
 router.get("/", (req, res) => {
