@@ -5,6 +5,8 @@ export const ROUTES = {
   LOGIN: "/login",
   REGISTER: "/register",
   FORGOT_PASSWORD: "/forgot-password",
+  RESET_PASSWORD: "/reset-password",
+  TRACK: "/track",
   TRACK_QUEUE: (queueId: string) => `/track/${queueId}`,
   RECEPTION: {
     DASHBOARD: "/reception/dashboard",
@@ -34,6 +36,6 @@ export const ROUTES = {
 export const ROLE_DASHBOARD_PATH: Record<UserRole, string> = {
   admin: ROUTES.ADMIN.DASHBOARD,
   doctor: ROUTES.DOCTOR.DASHBOARD,
-  reception: ROUTES.RECEPTION.DASHBOARD,
+  receptionist: ROUTES.RECEPTION.DASHBOARD,
   patient: ROUTES.PATIENT.DASHBOARD,
 };
