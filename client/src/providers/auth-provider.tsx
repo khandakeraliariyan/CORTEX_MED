@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { STORAGE_KEYS } from "@/constants/storage-keys";
-import { getCurrentUser } from "@/services/auth-service";
+import { getCurrentUser } from "@/features/authentication/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
 
 interface AuthContextValue {
