@@ -1,11 +1,13 @@
-export type UserRole = "admin" | "doctor" | "reception" | "patient";
+export type UserRole = "admin" | "doctor" | "receptionist" | "patient";
 
 export interface AuthUser {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   role: UserRole;
   avatarUrl?: string;
+  doctorId?: string | null;
 }
 
 export interface AuthTokens {
@@ -20,4 +22,11 @@ export interface LoginPayload {
 
 export interface LoginResponse extends AuthTokens {
   user: AuthUser;
+}
+
+export interface RegisterPayload {
+  name: string;
+  email: string;
+  password: string;
+  role: Exclude<UserRole, "patient">;
 }

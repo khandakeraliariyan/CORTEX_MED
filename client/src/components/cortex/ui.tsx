@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useAuthStore } from "@/store/auth-store";
+import { ROUTES } from "@/constants/routes";
 
 type NavItem = {
   label: string;
@@ -78,17 +80,19 @@ export function Avatar({ name, className = "" }: { name?: string; className?: st
   );
 }
 
-function sidebarNavFor(role: "admin" | "doctor" | "reception" | "patient") {
+export type DashboardRole = "admin" | "doctor" | "receptionist" | "patient";
+
+function sidebarNavFor(role: DashboardRole) {
   if (role === "doctor") return doctorNav;
   if (role === "patient") return patientNav;
-  if (role === "reception") return receptionNav;
+  if (role === "receptionist") return receptionNav;
   return adminNav;
 }
 
-const roleLabel: Record<"admin" | "doctor" | "reception" | "patient", string> = {
+const roleLabel: Record<DashboardRole, string> = {
   admin: "Administrator",
   doctor: "Doctor",
-  reception: "Front Desk",
+  receptionist: "Front Desk",
   patient: "Patient",
 };
 
@@ -98,15 +102,22 @@ export function DashboardShell({
   searchPlaceholder = "Search medical records...",
   children,
 }: {
-  role: "admin" | "doctor" | "reception" | "patient";
+  role: DashboardRole;
   active: string;
   searchPlaceholder?: string;
   children: ReactNode;
 }) {
   const nav = sidebarNavFor(role);
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const displayName = user?.name ?? "Guest User";
   const displayRole = user ? roleLabel[user.role] : roleLabel[role];
+
+  const handleLogout = () => {
+    clearSession();
+    router.replace(ROUTES.LOGIN);
+  };
 
   return (
     <div className="min-h-screen bg-[#f7f6ff] text-slate-950">
@@ -149,7 +160,7 @@ export function DashboardShell({
           )}
           <div className="space-y-3 text-slate-700">
             <Link href="#" className="flex h-10 items-center gap-4 px-4">? Help Center</Link>
-            <Link href="/login" className="flex h-10 items-center gap-4 px-4 text-red-600">-&gt; Logout</Link>
+            <button onClick={handleLogout} className="flex h-10 w-full items-center gap-4 px-4 text-left text-red-600">-&gt; Logout</button>
           </div>
         </div>
       </aside>
@@ -231,18 +242,20 @@ export function Button({
   children,
   variant = "primary",
   className = "",
+  type = "button",
+  ...rest
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "danger";
   className?: string;
-}) {
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className">) {
   const styles = {
     primary: "bg-[#0755d9] text-white border-[#0755d9]",
     secondary: "bg-white text-slate-950 border-[#c4c9dc]",
     danger: "bg-[#c91414] text-white border-[#c91414]",
   };
   return (
-    <button className={`h-12 rounded-lg border px-6 text-sm font-bold shadow-sm ${styles[variant]} ${className}`}>
+    <button type={type} className={`h-12 rounded-lg border px-6 text-sm font-bold shadow-sm ${styles[variant]} ${className}`} {...rest}>
       {children}
     </button>
   );

@@ -20,7 +20,14 @@ const loginValidation = z.object({
     }),
 });
 
+const refreshValidation = z.object({
+    body: z.object({
+        refreshToken: z.string(),
+    }),
+});
+
 module.exports = {
     registerValidation,
     loginValidation,
+    refreshValidation,
 };

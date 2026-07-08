@@ -35,6 +35,6 @@ export const ROUTES = {
 export const ROLE_DASHBOARD_PATH: Record<UserRole, string> = {
   admin: ROUTES.ADMIN.DASHBOARD,
   doctor: ROUTES.DOCTOR.DASHBOARD,
-  reception: ROUTES.RECEPTION.DASHBOARD,
+  receptionist: ROUTES.RECEPTION.DASHBOARD,
   patient: ROUTES.PATIENT.DASHBOARD,
 };

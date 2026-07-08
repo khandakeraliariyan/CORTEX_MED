@@ -1,7 +1,33 @@
 import { apiClient } from "@/services/api-client";
-import type { AuthUser } from "@/types/auth.types";
+import type { ApiResponse } from "@/types/api.types";
+import type {
+  AuthUser,
+  LoginPayload,
+  LoginResponse,
+  RegisterPayload,
+} from "@/types/auth.types";
+
+function normalizeUser(user: AuthUser): AuthUser {
+  return { ...user, id: user.id ?? user._id ?? "" };
+}
+
+export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  const { data } = await apiClient.post<ApiResponse<LoginResponse>>(
+    "/auth/login",
+    payload
+  );
+  return { ...data.data, user: normalizeUser(data.data.user) };
+}
+
+export async function register(payload: RegisterPayload): Promise<AuthUser> {
+  const { data } = await apiClient.post<ApiResponse<AuthUser>>(
+    "/auth/register",
+    payload
+  );
+  return normalizeUser(data.data);
+}
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const { data } = await apiClient.get<AuthUser>("/auth/me");
-  return data;
+  const { data } = await apiClient.get<ApiResponse<AuthUser>>("/auth/me");
+  return normalizeUser(data.data);
 }

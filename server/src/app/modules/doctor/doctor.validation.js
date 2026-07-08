@@ -1,8 +1,14 @@
 const { z } = require("zod");
 
+const newDoctorUser = z.object({
+    name: z.string().min(3),
+    email: z.string().email(),
+    password: z.string().min(6),
+});
+
 const createDoctorValidation = z.object({
     body: z.object({
-        user: z.string(),
+        user: z.union([z.string(), newDoctorUser]),
 
         department: z.string(),
 

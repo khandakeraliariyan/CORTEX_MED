@@ -4,23 +4,43 @@ const User = require("../auth/auth.model");
 
 const AppError = require("../../errors/AppError");
 
+const hashPassword = require("../../utils/hashPassword");
+
 const createDoctor = async (payload) => {
+    const { user: userField, ...doctorFields } = payload;
 
-    const user = await User.findById(payload.user);
+    let user;
 
-    if (!user) {
-        throw new AppError(404, "User not found");
-    }
+    if (typeof userField === "string") {
+        user = await User.findById(userField);
 
-    if (user.role !== "doctor") {
-        throw new AppError(
-            400,
-            "User must have doctor role"
-        );
+        if (!user) {
+            throw new AppError(404, "User not found");
+        }
+
+        if (user.role !== "doctor") {
+            throw new AppError(
+                400,
+                "User must have doctor role"
+            );
+        }
+    } else {
+        const exists = await User.findOne({ email: userField.email });
+
+        if (exists) {
+            throw new AppError(409, "Email already exists");
+        }
+
+        user = await User.create({
+            name: userField.name,
+            email: userField.email,
+            password: await hashPassword(userField.password),
+            role: "doctor",
+        });
     }
 
     const exists = await Doctor.findOne({
-        user: payload.user,
+        user: user._id,
     });
 
     if (exists) {
@@ -30,9 +50,14 @@ const createDoctor = async (payload) => {
         );
     }
 
-    return await Doctor.create(payload);
+    return await Doctor.create({ ...doctorFields, user: user._id });
+};
+
+const listDoctors = async () => {
+    return await Doctor.find().populate("user", "name email role isActive");
 };
 
 module.exports = {
     createDoctor,
+    listDoctors,
 };

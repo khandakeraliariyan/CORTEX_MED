@@ -21,6 +21,21 @@ const createDoctor = catchAsync(
     }
 );
 
+const listDoctors = catchAsync(
+    async (req, res) => {
+
+        const result = await DoctorService.listDoctors();
+
+        sendResponse(res, {
+            statusCode: 200,
+            message: "Doctors fetched successfully",
+            data: result,
+        });
+
+    }
+);
+
 module.exports = {
     createDoctor,
+    listDoctors,
 };

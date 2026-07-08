@@ -52,6 +52,48 @@ const createAppointment = async (payload) => {
     return updatedAppointment;
 };
 
+const listAppointments = async () => {
+    return await Appointment.find()
+        .sort({ createdAt: -1 })
+        .populate({
+            path: "doctor",
+            populate: { path: "user", select: "name email" },
+        });
+};
+
+const trackAppointment = async (code) => {
+    const appointment = await Appointment.findOne({
+        appointmentCode: code,
+    }).populate({
+        path: "doctor",
+        populate: { path: "user", select: "name email" },
+    });
+
+    if (!appointment) {
+        throw new AppError(404, "Appointment not found");
+    }
+
+    let peopleAhead = 0;
+
+    if (appointment.status === "waiting") {
+        peopleAhead = await Appointment.countDocuments({
+            doctor: appointment.doctor._id,
+            status: "waiting",
+            $or: [
+                { priority: { $lt: appointment.priority } },
+                {
+                    priority: appointment.priority,
+                    tokenNumber: { $lt: appointment.tokenNumber },
+                },
+            ],
+        });
+    }
+
+    return { appointment, peopleAhead };
+};
+
 module.exports = {
     createAppointment,
+    listAppointments,
+    trackAppointment,
 };

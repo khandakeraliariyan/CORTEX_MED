@@ -8,7 +8,7 @@ interface ReceptionLayoutProps {
 }
 
 export default function ReceptionLayout({ children }: ReceptionLayoutProps) {
-  const isAuthorized = useRoleGuard("reception");
+  const isAuthorized = useRoleGuard("receptionist");
 
   if (!isAuthorized) {
     return null;

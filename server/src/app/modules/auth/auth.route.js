@@ -5,12 +5,16 @@ const router = express.Router();
 const AuthController = require("./auth.controller");
 
 const validateRequest = require("../../middlewares/validateRequest");
+const auth = require("../../middlewares/auth");
 
-const { registerValidation } = require("./auth.validation");
-const { loginValidation } = require("./auth.validation");
+const { registerValidation, loginValidation, refreshValidation } = require("./auth.validation");
 
 router.post("/register", validateRequest(registerValidation), AuthController.register);
 
 router.post("/login", validateRequest(loginValidation), AuthController.login);
+
+router.post("/refresh", validateRequest(refreshValidation), AuthController.refresh);
+
+router.get("/me", auth(), AuthController.me);
 
 module.exports = router;
