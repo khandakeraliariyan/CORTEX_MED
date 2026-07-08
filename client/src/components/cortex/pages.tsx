@@ -21,9 +21,10 @@ import {
   Progress,
   StatusPill,
 } from "@/components/cortex/ui";
-import { login } from "@/services/auth-service";
+import { login, register } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
+import type { SelfRegisterableRole } from "@/types/auth.types";
 import { useCreateDoctor, useDoctors } from "@/features/doctor/hooks/use-doctors";
 import type { Doctor } from "@/features/doctor/types/doctor.types";
 import {
@@ -219,7 +220,147 @@ export function LoginPage() {
                 {loading ? "Signing In..." : "Log In to Dashboard"}
               </Button>
             </form>
-            <p className="mt-10 text-center text-slate-600">Need help accessing your account? <span className="font-bold text-[#0755d9]">Contact System Admin</span></p>
+            <p className="mt-10 text-center text-slate-600">
+              Need help accessing your account? <span className="font-bold text-[#0755d9]">Contact System Admin</span>
+            </p>
+            <p className="mt-3 text-center text-slate-600">
+              New staff member? <Link href="/register" className="font-bold text-[#0755d9]">Create an account</Link>
+            </p>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+export function RegisterPage() {
+  const router = useRouter();
+  const setSession = useAuthStore((state) => state.setSession);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "receptionist" as SelfRegisterableRole,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
+      });
+
+      const result = await login({ email: form.email, password: form.password });
+      setSession(result.user, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+      router.push(ROLE_DASHBOARD_PATH[result.user.role] ?? ROUTES.HOME);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-white text-slate-950">
+      <main className="grid min-h-[calc(100vh-88px)] lg:grid-cols-2">
+        <section className="relative hidden overflow-hidden bg-[#034da8] p-16 text-white lg:block">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20px_20px,rgba(255,255,255,.25)_1px,transparent_1px)] [background-size:48px_48px]" />
+          <div className="relative z-10 flex h-full flex-col justify-center">
+            <p className="text-lg font-black uppercase tracking-[0.18em] text-blue-100">Intelligence in Healthcare</p>
+            <h1 className="mt-5 text-6xl font-black">Join CortexMed</h1>
+            <p className="mt-8 max-w-[520px] text-2xl leading-10 text-blue-100">
+              Create a staff account to manage patients, queues, and appointments.
+            </p>
+          </div>
+        </section>
+        <section className="flex items-center justify-center px-6 py-16">
+          <div className="w-full max-w-[560px]">
+            <h1 className="text-5xl font-black">Create Account</h1>
+            <p className="mt-5 text-xl text-slate-600">Register as clinical or front-desk staff.</p>
+            <form className="mt-10 space-y-7" onSubmit={handleSubmit}>
+              <label className="block">
+                <span className="font-bold">Full Name</span>
+                <input
+                  required
+                  minLength={3}
+                  value={form.name}
+                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                  placeholder="Jane Doe"
+                />
+              </label>
+              <label className="block">
+                <span className="font-bold">Professional Email Address</span>
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                  placeholder="you@cortexmed.ai"
+                />
+              </label>
+              <label className="block">
+                <span className="font-bold">Role</span>
+                <select
+                  value={form.role}
+                  onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as SelfRegisterableRole }))}
+                  className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                >
+                  <option value="receptionist">Receptionist / Front Desk</option>
+                  <option value="doctor">Doctor</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="font-bold">Password</span>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={form.password}
+                  onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                  className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                  placeholder="At least 6 characters"
+                />
+              </label>
+              <label className="block">
+                <span className="font-bold">Confirm Password</span>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={form.confirmPassword}
+                  onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                  className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                  placeholder="Re-enter your password"
+                />
+              </label>
+              {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+              <Button type="submit" disabled={loading} className="h-16 w-full text-xl disabled:opacity-60">
+                {loading ? "Creating Account..." : "Create Account"}
+              </Button>
+            </form>
+            <p className="mt-10 text-center text-slate-600">
+              Already have an account? <Link href="/login" className="font-bold text-[#0755d9]">Log in</Link>
+            </p>
           </div>
         </section>
       </main>

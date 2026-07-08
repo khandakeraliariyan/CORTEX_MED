@@ -10,6 +10,13 @@ const { generateToken, verifyToken } = require("../../utils/jwt");
 const config = require("../../config");
 
 const registerUser = async (payload) => {
+    if (payload.role === "admin") {
+        throw new AppError(
+            403,
+            "Admin accounts cannot be self-registered"
+        );
+    }
+
     const exists = await User.findOne({
         email: payload.email,
     });

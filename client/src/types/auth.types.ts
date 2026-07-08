@@ -24,9 +24,11 @@ export interface LoginResponse extends AuthTokens {
   user: AuthUser;
 }
 
+export type SelfRegisterableRole = "doctor" | "receptionist";
+
 export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
-  role: Exclude<UserRole, "patient">;
+  role: SelfRegisterableRole;
 }
