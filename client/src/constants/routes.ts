@@ -22,6 +22,7 @@ export const ROUTES = {
     DASHBOARD: "/admin/dashboard",
     ANALYTICS: "/admin/analytics",
     STAFF: "/admin/staff",
+    SETTINGS: "/admin/settings",
   },
   PATIENT: {
     DASHBOARD: "/patient/dashboard",
