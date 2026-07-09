@@ -76,10 +76,9 @@ export function LandingPage() {
             <Link href="#workflow">Workflow</Link>
             <Link href="#pricing">Pricing</Link>
           </nav>
-          <div className="ml-auto flex items-center gap-5 text-[#0755d9]">
-            <span>!</span>
-            <span>#</span>
-            <Avatar className="h-8 w-8" />
+          <div className="ml-auto flex items-center gap-4">
+            <Link href={ROUTES.LOGIN} className="text-sm font-bold text-[#0755d9]">Login</Link>
+            <Link href={ROUTES.REGISTER}><Button>Register</Button></Link>
           </div>
         </div>
       </header>
@@ -135,7 +134,7 @@ export function LandingPage() {
           <h2 className="text-3xl font-black">Ready to transform your hospital?</h2>
           <p className="mx-auto mt-5 max-w-[620px] text-blue-100">Use CortexMed to reduce patient frustration and improve care coordination.</p>
           <div className="mt-8 flex justify-center gap-4">
-            <Button variant="secondary">Get Started Today</Button>
+            <Link href={ROUTES.REGISTER}><Button variant="secondary">Get Started Today</Button></Link>
             <Button className="border-white/40 bg-transparent">Contact Sales</Button>
           </div>
         </section>
