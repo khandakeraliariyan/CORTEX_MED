@@ -5,11 +5,18 @@ const AppError = require("../../errors/AppError");
 const hashPassword = require("../../utils/hashPassword");
 const comparePassword = require("../../utils/comparePassword");
 
-const { generateToken } = require("../../utils/jwt");
+const { generateToken, verifyToken } = require("../../utils/jwt");
 
 const config = require("../../config");
 
 const registerUser = async (payload) => {
+    if (payload.role === "admin") {
+        throw new AppError(
+            403,
+            "Admin accounts cannot be self-registered"
+        );
+    }
+
     const exists = await User.findOne({
         email: payload.email,
     });
@@ -21,6 +28,8 @@ const registerUser = async (payload) => {
     payload.password = await hashPassword(payload.password);
 
     const user = await User.create(payload);
+
+    user.password = undefined;
 
     return user;
 };
@@ -55,15 +64,81 @@ const loginUser = async (payload) => {
         config.jwt_access_expire
     );
 
+    const refreshToken = generateToken(
+        jwtPayload,
+        config.jwt_refresh_secret,
+        config.jwt_refresh_expire
+    );
+
+    await User.updateOne(
+        { _id: user._id },
+        { lastLogin: new Date() }
+    );
     user.password = undefined;
 
     return {
         accessToken,
+        refreshToken,
         user,
     };
+};
+
+const refreshAccessToken = async (refreshToken) => {
+    if (!refreshToken) {
+        throw new AppError(401, "Refresh token is required");
+    }
+
+    let decoded;
+    try {
+        decoded = verifyToken(refreshToken, config.jwt_refresh_secret);
+    } catch {
+        throw new AppError(401, "Invalid or expired refresh token");
+    }
+
+    const user = await User.findById(decoded.id);
+
+    if (!user || !user.isActive) {
+        throw new AppError(401, "User not found");
+    }
+
+    const jwtPayload = {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+    };
+
+    const accessToken = generateToken(
+        jwtPayload,
+        config.jwt_access_secret,
+        config.jwt_access_expire
+    );
+
+    return { accessToken };
+};
+
+const getMe = async (userId) => {
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new AppError(404, "User not found");
+    }
+
+    if (user.role === "doctor") {
+        const Doctor = require("../doctor/doctor.model");
+        const doctorProfile = await Doctor.findOne({ user: user._id }).select("_id");
+
+        return {
+            ...user.toObject(),
+            doctorId: doctorProfile ? doctorProfile._id : null,
+        };
+    }
+
+    return user;
 };
 
 module.exports = {
     registerUser,
     loginUser,
+    refreshAccessToken,
+    getMe,
 };

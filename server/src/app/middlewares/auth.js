@@ -7,11 +7,15 @@ const AppError = require("../errors/AppError");
 const auth = (...roles) => {
     return async (req, res, next) => {
         try {
-            const token = req.headers.authorization;
+            const header = req.headers.authorization;
 
-            if (!token) {
+            if (!header) {
                 throw new AppError(401, "Unauthorized");
             }
+
+            const token = header.startsWith("Bearer ")
+                ? header.slice(7)
+                : header;
 
             const decoded = verifyToken(
                 token,

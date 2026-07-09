@@ -10,6 +10,8 @@ const auth = require("../../middlewares/auth");
 
 const { createDoctorValidation, } = require("./doctor.validation");
 
+router.get("/", auth("admin", "receptionist", "doctor"), DoctorController.listDoctors);
+
 router.post("/", auth("admin"), validateRequest(createDoctorValidation), DoctorController.createDoctor);
 
 module.exports = router;

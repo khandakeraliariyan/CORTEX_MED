@@ -16,6 +16,30 @@ const createAppointment = catchAsync(async (req, res) => {
     });
 });
 
+const listAppointments = catchAsync(async (req, res) => {
+    const result = await AppointmentService.listAppointments();
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Appointments fetched successfully",
+        data: result,
+    });
+});
+
+const trackAppointment = catchAsync(async (req, res) => {
+    const result = await AppointmentService.trackAppointment(
+        req.params.code
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Appointment fetched successfully",
+        data: result,
+    });
+});
+
 module.exports = {
     createAppointment,
+    listAppointments,
+    trackAppointment,
 };

@@ -10,14 +10,27 @@ const runTriage = async (appointmentId) => {
         throw new AppError(404, "Appointment not found");
     }
 
-    const response = await axios.post(
-        "http://localhost:8000/triage",
-        {
-            symptoms: appointment.symptoms,
-        }
-    );
+    let result;
 
-    const result = response.data;
+    try {
+        const response = await axios.post(
+            "http://localhost:8000/triage",
+            {
+                symptoms: appointment.symptoms,
+            },
+            { timeout: 4000 }
+        );
+
+        result = response.data;
+    } catch {
+        // AI triage service unavailable - fall back to a neutral priority
+        // so booking never blocks on the external model being offline.
+        result = {
+            priority: 3,
+            reason: "AI triage unavailable - assigned default priority.",
+            confidence: null,
+        };
+    }
 
     appointment.priority = result.priority;
     appointment.triageReason = result.reason;

@@ -1,0 +1,8 @@
+import type { Appointment } from "@/features/appointment/types/appointment.types";
+
+export type QueueEntry = Appointment;
+
+export interface QueueResult {
+  current: Appointment | null;
+  waiting: Appointment[];
+}

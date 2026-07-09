@@ -8,7 +8,15 @@ const WaitTimeService = require("../wait-time/waitTime.service");
 const NotificationService = require("../notification/notification.service");
 
 const getDoctorQueue = async (doctorId) => {
-    return await Appointment.find({
+    const current = await Appointment.findOne({
+        doctor: doctorId,
+        status: "serving",
+    }).populate({
+        path: "doctor",
+        populate: { path: "user", select: "name email" },
+    });
+
+    const waiting = await Appointment.find({
         doctor: doctorId,
         status: "waiting",
     })
@@ -16,7 +24,12 @@ const getDoctorQueue = async (doctorId) => {
             priority: 1,
             tokenNumber: 1,
         })
-        .populate("doctor");
+        .populate({
+            path: "doctor",
+            populate: { path: "user", select: "name email" },
+        });
+
+    return { current, waiting };
 };
 
 const callNextPatient = async (doctorId) => {

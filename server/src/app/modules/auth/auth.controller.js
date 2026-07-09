@@ -23,7 +23,29 @@ const login = catchAsync(async (req, res) => {
     });
 });
 
+const refresh = catchAsync(async (req, res) => {
+    const result = await AuthService.refreshAccessToken(req.body.refreshToken);
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Token refreshed successfully",
+        data: result,
+    });
+});
+
+const me = catchAsync(async (req, res) => {
+    const result = await AuthService.getMe(req.user.id);
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Current user fetched successfully",
+        data: result,
+    });
+});
+
 module.exports = {
     register,
     login,
+    refresh,
+    me,
 };
