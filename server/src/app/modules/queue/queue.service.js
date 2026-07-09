@@ -8,6 +8,8 @@ const WaitTimeService = require("../wait-time/waitTime.service");
 const NotificationService = require("../notification/notification.service");
 
 const getDoctorQueue = async (doctorId) => {
+    const doctor = await Doctor.findById(doctorId);
+
     const current = await Appointment.findOne({
         doctor: doctorId,
         status: "serving",
@@ -29,7 +31,43 @@ const getDoctorQueue = async (doctorId) => {
             populate: { path: "user", select: "name email" },
         });
 
-    return { current, waiting };
+    const patientsSeen = await Appointment.countDocuments({
+        doctor: doctorId,
+        status: "completed",
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayAdmissions = await Appointment.countDocuments({
+        doctor: doctorId,
+        createdAt: { $gte: today, $lt: tomorrow },
+    });
+
+    const todayDischarges = await Appointment.countDocuments({
+        doctor: doctorId,
+        status: "completed",
+        completedAt: { $gte: today, $lt: tomorrow },
+    });
+
+    const efficiencyGoal = todayAdmissions
+        ? Math.round((todayDischarges / todayAdmissions) * 100)
+        : 0;
+
+    return {
+        current,
+        waiting,
+        stats: {
+            avgConsultationTime: doctor?.avgConsultationTime ?? 0,
+            patientsSeen,
+            todayAdmissions,
+            todayDischarges,
+            efficiencyGoal,
+        },
+    };
 };
 
 const callNextPatient = async (doctorId) => {

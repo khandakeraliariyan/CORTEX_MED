@@ -14,6 +14,6 @@ router.get("/", auth("admin", "receptionist"), AppointmentController.listAppoint
 
 router.get("/track/:code", AppointmentController.trackAppointment);
 
-router.post("/", auth("admin", "receptionist"), validateRequest(createAppointmentValidation), AppointmentController.createAppointment);
+router.post("/", auth("admin", "receptionist", "doctor"), validateRequest(createAppointmentValidation), AppointmentController.createAppointment);
 
 module.exports = router;

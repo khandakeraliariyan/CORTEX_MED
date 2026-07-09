@@ -31,7 +31,7 @@ const doctorNav: NavItem[] = [
 const receptionNav: NavItem[] = [
   { label: "Dashboard", href: "/reception/dashboard", icon: "[]" },
   { label: "Appointments", href: "/reception/appointments", icon: "##" },
-  { label: "Doctors", href: "/admin/staff", icon: "++" },
+  { label: "Doctors", href: "/reception/doctors", icon: "++" },
   { label: "Queue", href: "/reception/queue", icon: "::" },
 ];
 
@@ -154,9 +154,9 @@ export function DashboardShell({
             </Link>
           )}
           {role === "doctor" && (
-            <button className="mb-5 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#0755d9] px-5 text-base font-bold text-white">
+            <Link href="/doctor/intake" className="mb-5 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#0755d9] px-5 text-base font-bold text-white">
               <span className="text-2xl leading-none">+</span> Emergency Intake
-            </button>
+            </Link>
           )}
           <div className="space-y-3 text-slate-700">
             <Link href="#" className="flex h-10 items-center gap-4 px-4">? Help Center</Link>

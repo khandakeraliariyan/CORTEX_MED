@@ -8,6 +8,17 @@ const comparePassword = require("../../utils/comparePassword");
 const { generateToken, verifyToken } = require("../../utils/jwt");
 
 const config = require("../../config");
+const Doctor = require("../doctor/doctor.model");
+
+const getOrCreateDoctorProfile = async (userId) => {
+    let doctorProfile = await Doctor.findOne({ user: userId }).select("_id");
+
+    if (!doctorProfile) {
+        doctorProfile = await Doctor.create({ user: userId });
+    }
+
+    return doctorProfile;
+};
 
 const registerUser = async (payload) => {
     if (payload.role === "admin") {
@@ -29,9 +40,16 @@ const registerUser = async (payload) => {
 
     const user = await User.create(payload);
 
+    // If the registered user is a doctor,
+    // automatically create a doctor profile.
+    if (user.role === "doctor") {
+        await getOrCreateDoctorProfile(user._id);
+    }
+
     user.password = undefined;
 
     return user;
+
 };
 
 const loginUser = async (payload) => {
@@ -76,10 +94,17 @@ const loginUser = async (payload) => {
     );
     user.password = undefined;
 
+    const authUser = user.toObject();
+
+    if (user.role === "doctor") {
+        const doctorProfile = await getOrCreateDoctorProfile(user._id);
+        authUser.doctorId = doctorProfile._id;
+    }
+
     return {
         accessToken,
         refreshToken,
-        user,
+        user: authUser,
     };
 };
 
@@ -124,8 +149,7 @@ const getMe = async (userId) => {
     }
 
     if (user.role === "doctor") {
-        const Doctor = require("../doctor/doctor.model");
-        const doctorProfile = await Doctor.findOne({ user: user._id }).select("_id");
+        const doctorProfile = await getOrCreateDoctorProfile(user._id);
 
         return {
             ...user.toObject(),

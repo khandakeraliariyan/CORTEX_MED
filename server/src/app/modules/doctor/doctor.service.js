@@ -6,6 +6,35 @@ const AppError = require("../../errors/AppError");
 
 const hashPassword = require("../../utils/hashPassword");
 
+const ensureDoctorProfiles = async () => {
+    const doctorUsers = await User.find({
+        role: "doctor",
+        isActive: true,
+    }).select("_id");
+
+    const doctorUserIds = doctorUsers.map((user) => user._id);
+
+    if (doctorUserIds.length === 0) {
+        return;
+    }
+
+    const existingProfiles = await Doctor.find({
+        user: { $in: doctorUserIds },
+    }).select("user");
+
+    const existingUserIds = new Set(
+        existingProfiles.map((profile) => profile.user.toString())
+    );
+
+    const missingProfiles = doctorUserIds
+        .filter((userId) => !existingUserIds.has(userId.toString()))
+        .map((userId) => ({ user: userId }));
+
+    if (missingProfiles.length > 0) {
+        await Doctor.insertMany(missingProfiles);
+    }
+};
+
 const createDoctor = async (payload) => {
     const { user: userField, ...doctorFields } = payload;
 
@@ -54,6 +83,8 @@ const createDoctor = async (payload) => {
 };
 
 const listDoctors = async () => {
+    await ensureDoctorProfiles();
+
     return await Doctor.find().populate("user", "name email role isActive");
 };
 
