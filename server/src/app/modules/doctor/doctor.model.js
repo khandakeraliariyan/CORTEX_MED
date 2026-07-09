@@ -14,18 +14,21 @@ const doctorSchema = new mongoose.Schema(
         department: {
             type: String,
             required: true,
+            default: "General Medicine",
             trim: true,
         },
 
         specialty: {
             type: String,
             required: true,
+            default: "General Practitioner",
             trim: true,
         },
 
         room: {
             type: String,
             required: true,
+            default: "Unassigned",
             trim: true,
         },
 
@@ -48,11 +51,13 @@ const doctorSchema = new mongoose.Schema(
         startTime: {
             type: String,
             required: true,
+            default: "09:00",
         },
 
         endTime: {
             type: String,
             required: true,
+            default: "17:00",
         },
 
         status: {
