@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { ReactNode, useState, type ChangeEvent, type FormEvent } from "react";
 import { isAxiosError } from "axios";
 import Image from "next/image";
 import Link from "next/link";
@@ -749,9 +749,11 @@ export function ReceptionDashboardPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
   const createAppointment = useCreateAppointment();
+  const currentUser = useAuthStore((state) => state.user);
 
   const waiting = appointments.filter((a) => a.status === "waiting");
-  const available = doctors.filter((d) => d.status === "available").length;
+  const critical = waiting.filter((a) => a.priority <= 2);
+  const available = doctors.filter((d) => d.status === "available");
   const avgWait = waiting.length
     ? Math.round(waiting.reduce((sum, a) => sum + a.estimatedWait, 0) / waiting.length)
     : 0;
@@ -783,15 +785,21 @@ export function ReceptionDashboardPage() {
   };
 
   return (
-    <DashboardShell role="receptionist" active="Dashboard" searchPlaceholder="Search patients, doctors...">
-      <div className="grid gap-6 md:grid-cols-4">
-        <MetricCard icon="P" label="Today's Patients" value={String(appointments.length)} />
-        <MetricCard icon="H" label="Waiting Patients" value={String(waiting.length)} tone="orange" />
-        <MetricCard icon="+" label="Doctors Available" value={String(available)} tone="green" />
-        <MetricCard icon="O" label="Average Wait Time" value={waiting.length ? `${avgWait}m` : "--"} tone="slate" />
+    <FrontDeskDashboardShell userName={currentUser?.name ?? "Front Desk"}>
+      <div className="mb-7">
+        <h1 className="text-4xl font-black tracking-tight">Analytics Overview</h1>
+        <p className="mt-1 text-lg text-slate-700">Hospital performance metrics for today.</p>
       </div>
+
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <FrontDeskMetric icon="▣" label="Total Doctors" value={String(doctors.length)} delta={`${available.length} available`} tone="blue" progress={doctors.length ? Math.round((available.length / doctors.length) * 100) : 0} />
+        <FrontDeskMetric icon="◷" label="Appointments Today" value={String(appointments.length)} delta={`${waiting.length} waiting`} tone="green" progress={appointments.length ? Math.round((waiting.length / appointments.length) * 100) : 0} />
+        <FrontDeskMetric icon="⏱" label="Average Wait" value={waiting.length ? `${avgWait}m` : "--"} delta={avgWait ? `${avgWait}m` : "Stable"} tone="orange" progress={Math.min(100, avgWait * 4)} />
+        <FrontDeskMetric icon="△" label="Critical Cases" value={String(critical.length)} delta={critical.length ? "Immediate" : "Stable"} tone="red" progress={appointments.length ? Math.round((critical.length / appointments.length) * 100) : 0} />
+      </div>
+
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Book New Patient">
+        <FrontDeskCard title="Book New Patient">
           <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
             <label className="block"><span className="font-bold">Patient Full Name</span><input required value={form.patientName} onChange={(e) => setForm((p) => ({ ...p, patientName: e.target.value }))} className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] px-4" placeholder="e.g. Johnathan Smith" /></label>
             <div className="grid grid-cols-2 gap-4">
@@ -817,13 +825,190 @@ export function ReceptionDashboardPage() {
               <Button type="submit" disabled={createAppointment.isPending} className="disabled:opacity-60">{createAppointment.isPending ? "Booking..." : "Book Patient Entry"}</Button>
             </div>
           </form>
-        </Panel>
-        <Panel title="Live Queue" action={<StatusPill>{waiting.length} Live</StatusPill>}>
+        </FrontDeskCard>
+        <FrontDeskCard title="Live Queue" action={<StatusPill>{waiting.length} Live</StatusPill>}>
           <LiveQueueCards patients={waiting.slice(0, 5)} />
-        </Panel>
+        </FrontDeskCard>
       </div>
-      <Panel title="Recent Check-ins" className="mt-7"><AppointmentTable appointments={appointments.slice(0, 10)} /></Panel>
-    </DashboardShell>
+
+      <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
+        <FrontDeskDoctorManagement doctors={doctors} />
+        <FrontDeskRecentActivity appointments={appointments.slice(0, 5)} />
+      </div>
+
+      <FrontDeskReceptionSupport currentUserName={currentUser?.name ?? "Front Desk"} />
+    </FrontDeskDashboardShell>
+  );
+}
+
+function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; userName: string }) {
+  const router = useRouter();
+  const clearSession = useAuthStore((state) => state.clearSession);
+
+  const handleLogout = () => {
+    clearSession();
+    router.replace(ROUTES.LOGIN);
+  };
+
+  const nav = [
+    { label: "Dashboard", href: "/reception/dashboard", icon: "▦" },
+    { label: "Appointments", href: "/reception/appointments", icon: "▤" },
+    { label: "Doctors", href: "/reception/doctors", icon: "▣" },
+    { label: "Queue", href: "/reception/queue", icon: "◉" },
+    { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
+    { label: "Settings", href: "#", icon: "⚙" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f7f6ff] text-slate-950">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[280px] border-r border-[#c4c9dc] bg-[#f0f2ff] lg:flex lg:flex-col">
+        <div className="flex h-[82px] items-center gap-3 px-7">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#0755d9] text-white">▣</span>
+          <div><div className="text-xl font-black text-[#004bd1]">CortexMed</div><div className="text-sm">Smart Hospital Platform</div></div>
+        </div>
+        <nav className="flex-1 space-y-3 px-4 pt-8">
+          {nav.map((item) => (
+            <Link key={item.label} href={item.href} className={`flex h-12 items-center gap-4 rounded-lg px-5 ${item.label === "Dashboard" ? "bg-[#2563eb] font-bold text-white" : "text-slate-800 hover:bg-white"}`}>
+              <span className="grid h-6 w-6 place-items-center text-lg">{item.icon}</span>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="border-t border-[#c4c9dc] p-4">
+          <Link href="#" className="flex h-11 items-center gap-4 px-4 text-slate-700">? Help Center</Link>
+          <button onClick={handleLogout} className="flex h-11 w-full items-center gap-4 px-4 text-left text-red-600">↪ Logout</button>
+        </div>
+      </aside>
+
+      <header className="sticky top-0 z-10 border-b border-[#c4c9dc] bg-[#fbfaff] lg:ml-[280px]">
+        <div className="flex h-[64px] items-center gap-5 px-6">
+          <div className="relative w-full max-w-[390px]">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">⌕</span>
+            <input className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none" placeholder="Search medical records..." />
+          </div>
+          <div className="ml-auto flex items-center gap-5 text-xl">
+            <span>♙</span><span>▣</span><span>□</span><span className="h-8 w-px bg-[#c4c9dc]" />
+            <div className="hidden text-right text-sm sm:block"><b>{userName}</b><div>Front Desk Officer</div></div>
+            <Avatar name={userName} className="h-10 w-10" />
+          </div>
+        </div>
+      </header>
+
+      <main className="lg:ml-[280px]">
+        <div className="mx-auto max-w-[960px] px-6 py-7 xl:max-w-[1180px]">{children}</div>
+        <footer className="mt-10 border-t border-[#c4c9dc] bg-[#dfe3ef] px-8 py-7">
+          <div className="mx-auto flex max-w-[1180px] flex-col gap-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+            <div><div className="text-xl font-black text-[#004bd1]">CortexMed</div>© 2024 CortexMed AI Hospital Systems. All rights reserved.</div>
+            <div className="flex gap-7"><span>Privacy Policy</span><span>Terms of Service</span><span>Compliance</span><span>Security</span></div>
+          </div>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function FrontDeskCard({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <section className="rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-[#d7dbea] px-6 py-5">
+        <h2 className="text-2xl font-black">{title}</h2>
+        {action}
+      </div>
+      <div className="p-6">{children}</div>
+    </section>
+  );
+}
+
+function FrontDeskMetric({ icon, label, value, delta, tone, progress }: { icon: string; label: string; value: string; delta: string; tone: "blue" | "green" | "orange" | "red"; progress: number }) {
+  const tones = {
+    blue: "bg-blue-100 text-[#0755d9] bg-[#0755d9]",
+    green: "bg-emerald-100 text-emerald-800 bg-emerald-700",
+    orange: "bg-orange-100 text-orange-800 bg-orange-700",
+    red: "bg-red-100 text-red-800 bg-red-700",
+  };
+  const [soft, text, bar] = tones[tone].split(" ");
+
+  return (
+    <section className="rounded-xl border border-[#c4c9dc] bg-white p-6 shadow-sm">
+      <div className="flex items-start justify-between">
+        <span className={`grid h-14 w-14 place-items-center rounded-lg text-xl ${soft} ${text}`}>{icon}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${soft} ${text}`}>{delta}</span>
+      </div>
+      <div className="mt-5 text-slate-700">{label}</div>
+      <div className="text-3xl font-black">{value}</div>
+      <div className="mt-5 h-1 rounded-full bg-[#e7e9f5]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(4, Math.min(100, progress))}%` }} /></div>
+    </section>
+  );
+}
+
+function FrontDeskDoctorManagement({ doctors }: { doctors: Doctor[] }) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+      <div className="flex items-center justify-between px-6 py-5">
+        <div><h2 className="text-2xl font-black">Doctor Management</h2><p className="text-slate-700">Live status and performance ratings</p></div>
+        <Link href="/reception/doctors" className="font-bold text-[#0755d9]">View All</Link>
+      </div>
+      <div className="grid grid-cols-[1.5fr_1fr_1fr_.8fr] bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest">
+        <span>Practitioner</span><span>Department</span><span>Status</span><span className="text-right">Avg. Cons.</span>
+      </div>
+      {doctors.length === 0 ? (
+        <div className="p-6"><EmptyState label="No doctors registered yet." /></div>
+      ) : doctors.slice(0, 5).map((doctor) => (
+        <div key={doctor._id} className="grid grid-cols-[1.5fr_1fr_1fr_.8fr] items-center border-t border-[#d7dbea] px-6 py-5">
+          <div className="flex items-center gap-4"><Avatar name={doctor.user.name} className="h-10 w-10" /><b>{doctor.user.name}</b></div>
+          <span>{doctor.department}</span>
+          <StatusPill tone={doctor.status === "available" ? "green" : doctor.status === "on_leave" ? "orange" : "slate"}>{doctor.status.replace("_", " ")}</StatusPill>
+          <b className="text-right">{doctor.avgConsultationTime}m</b>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function FrontDeskRecentActivity({ appointments }: { appointments: Appointment[] }) {
+  const activities = appointments.map((appointment) => ({
+    title: appointment.status === "completed" ? `Completed: ${appointment.patientName}` : appointment.status === "serving" ? `In consultation: ${appointment.patientName}` : `Check-in: ${appointment.patientName}`,
+    detail: `${appointment.symptoms} · Token #${appointment.tokenNumber}`,
+    time: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date(appointment.createdAt)),
+    tone: appointment.status === "completed" ? "bg-emerald-100 text-emerald-700" : appointment.status === "serving" ? "bg-blue-100 text-[#0755d9]" : "bg-orange-100 text-orange-700",
+  }));
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+      <div className="border-b border-[#d7dbea] px-6 py-5"><h2 className="text-2xl font-black">Recent Activity</h2></div>
+      <div className="space-y-5 p-6">
+        {activities.length === 0 ? <EmptyState label="No recent activity yet." /> : activities.map((activity) => (
+          <div key={`${activity.title}-${activity.time}`} className="flex gap-4">
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${activity.tone}`}>✓</span>
+            <div><b>{activity.title}</b><p className="text-sm text-slate-700">{activity.detail}</p><span className="text-xs font-bold uppercase text-slate-500">{activity.time}</span></div>
+          </div>
+        ))}
+      </div>
+      <Link href="/reception/appointments" className="block border-t border-[#d7dbea] py-4 text-center font-bold">View History</Link>
+    </section>
+  );
+}
+
+function FrontDeskReceptionSupport({ currentUserName }: { currentUserName: string }) {
+  const staff = [
+    { name: currentUserName, role: "Front Desk A", online: true },
+  ];
+
+  return (
+    <section className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+      <div className="flex items-center justify-between px-6 py-5">
+        <h2 className="text-2xl font-black">Reception & Support</h2>
+        <div className="flex gap-5 text-sm"><span><b className="text-emerald-700">●</b> {staff.filter((item) => item.online).length} Online</span><span><b className="text-slate-300">●</b> 0 Away</span></div>
+      </div>
+      <div className="grid md:grid-cols-4">
+        {staff.map((member) => (
+          <div key={member.name} className="flex items-center gap-4 border-t border-[#d7dbea] px-6 py-6 md:border-r">
+            <Avatar name={member.name} className="h-12 w-12" />
+            <div><b>{member.name}</b><p className={member.online ? "font-bold text-emerald-700" : "text-slate-500"}>{member.role}</p></div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
