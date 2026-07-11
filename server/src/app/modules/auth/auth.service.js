@@ -10,11 +10,11 @@ const { generateToken, verifyToken } = require("../../utils/jwt");
 const config = require("../../config");
 const Doctor = require("../doctor/doctor.model");
 
-const getOrCreateDoctorProfile = async (userId) => {
+const getOrCreateDoctorProfile = async (userId, doctorFields = {}) => {
     let doctorProfile = await Doctor.findOne({ user: userId }).select("_id");
 
     if (!doctorProfile) {
-        doctorProfile = await Doctor.create({ user: userId });
+        doctorProfile = await Doctor.create({ user: userId, ...doctorFields });
     }
 
     return doctorProfile;
@@ -38,12 +38,14 @@ const registerUser = async (payload) => {
 
     payload.password = await hashPassword(payload.password);
 
-    const user = await User.create(payload);
+    const { department, ...userPayload } = payload;
+
+    const user = await User.create(userPayload);
 
     // If the registered user is a doctor,
     // automatically create a doctor profile.
     if (user.role === "doctor") {
-        await getOrCreateDoctorProfile(user._id);
+        await getOrCreateDoctorProfile(user._id, { department });
     }
 
     user.password = undefined;

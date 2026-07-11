@@ -342,6 +342,7 @@ export function RegisterPage() {
     password: "",
     confirmPassword: "",
     role: "receptionist" as SelfRegisterableRole,
+    department: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -355,6 +356,11 @@ export function RegisterPage() {
       return;
     }
 
+    if (form.role === "doctor" && !form.department.trim()) {
+      setError("Please enter your department.");
+      return;
+    }
+
     setLoading(true);
     try {
       await register({
@@ -362,6 +368,7 @@ export function RegisterPage() {
         email: form.email,
         password: form.password,
         role: form.role,
+        department: form.role === "doctor" ? form.department.trim() : undefined,
       });
 
       const result = await login({ email: form.email, password: form.password });
@@ -428,6 +435,18 @@ export function RegisterPage() {
                   <option value="doctor">Doctor</option>
                 </select>
               </label>
+              {form.role === "doctor" && (
+                <label className="block">
+                  <span className="font-bold">Department</span>
+                  <input
+                    required
+                    value={form.department}
+                    onChange={(event) => setForm((prev) => ({ ...prev, department: event.target.value }))}
+                    className="mt-3 h-16 w-full rounded-xl border border-[#c4c9dc] px-5 text-lg outline-none"
+                    placeholder="Cardiology"
+                  />
+                </label>
+              )}
               <label className="block">
                 <span className="font-bold">Password</span>
                 <input
@@ -551,50 +570,267 @@ export function AppointmentManagementPage() {
   const avgWait = waiting.length
     ? Math.round(waiting.reduce((sum, a) => sum + a.estimatedWait, 0) / waiting.length)
     : 0;
+  const barValues = appointments.length
+    ? appointments.slice(0, 10).map((appointment) => Math.max(24, Math.min(96, appointment.estimatedWait * 4 || 28)))
+    : [38, 62, 48, 82, 67, 57, 43, 33, 52, 72];
 
   return (
     <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients...">
-      <PageTitle title="Appointment Management" subtitle="Real-time scheduling and patient flow optimization." actions={<><Button variant="secondary">Filter View</Button><Button variant="secondary">Export PDF</Button></>} />
+      <PageTitle
+        title="Appointment Management"
+        subtitle="Real-time scheduling and patient flow optimization."
+        actions={
+          <>
+            <Button variant="secondary" className="h-12 rounded-xl px-5">▾ Filter View</Button>
+            <Button variant="secondary" className="h-12 rounded-xl px-5">⌄ Export PDF</Button>
+          </>
+        }
+      />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon="++" label="Total Scheduled" value={String(appointments.length)} />
-        <MetricCard icon="H" label="Avg. Wait Time" value={waiting.length ? `${avgWait} min` : "--"} tone="green" />
-        <MetricCard icon="!" label="Urgent Cases" value={String(urgent)} tone="orange" />
-        <MetricCard icon="O" label="Completion Rate" value={`${completionRate}%`} tone="slate" />
+        <ReceptionMetric icon="♚" label="Total Scheduled" value={String(appointments.length || 0)} delta="+12%" tone="blue" />
+        <ReceptionMetric icon="⌛" label="Avg. Wait Time" value={waiting.length ? `${avgWait} min` : "--"} delta={waiting.length ? "-4m" : "0m"} tone="green" />
+        <ReceptionMetric icon="!" label="Urgent Cases" value={String(urgent)} delta={urgent ? "High" : "Low"} tone="orange" />
+        <ReceptionMetric icon="⊙" label="Completion Rate" value={appointments.length ? `${completionRate}%` : "--"} delta={appointments.length ? `${completionRate}%` : "--"} tone="slate" />
       </div>
-      <Panel className="mt-7">
-        {isLoading ? <div className="p-6"><EmptyState label="Loading appointments..." /></div> : <AppointmentTable appointments={appointments} />}
-      </Panel>
+      {isLoading ? (
+        <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading appointments..." /></div>
+      ) : (
+        <AppointmentTable appointments={appointments} />
+      )}
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Queue Volume Trends"><BarChart /></Panel>
-        <Panel title="Department Overview">
-          <EmptyState label="No department activity to show yet." />
-        </Panel>
+        <section className="rounded-xl border border-[#d7dbea] bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-black">Queue Volume Trends</h2>
+          <AppointmentBarChart values={barValues} />
+        </section>
+        <DepartmentOverview appointments={appointments} />
       </div>
     </DashboardShell>
   );
 }
 
-function AppointmentTable({ appointments }: { appointments: Appointment[] }) {
+function ReceptionMetric({
+  icon,
+  label,
+  value,
+  delta,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  delta: string;
+  tone: "blue" | "green" | "orange" | "slate";
+}) {
+  const tones = {
+    blue: "bg-blue-100 text-[#0755d9]",
+    green: "bg-emerald-100 text-emerald-800",
+    orange: "bg-orange-100 text-orange-800",
+    slate: "bg-slate-100 text-slate-700",
+  };
+  const deltaTone = tone === "orange" ? "text-red-700" : tone === "green" ? "text-emerald-800" : "text-[#0755d9]";
+
   return (
-    <div className="-m-6 overflow-hidden">
-      <div className="grid grid-cols-[1.4fr_1fr_.8fr_.7fr_1fr_.7fr] bg-[#f0f1fb] px-6 py-5 text-xs font-black uppercase tracking-widest">
-        <span>Patient</span><span>Doctor</span><span>Priority</span><span>Token</span><span>Status</span><span>Est. Wait</span>
+    <section className="rounded-xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+      <div className="flex items-start justify-between">
+        <span className={`grid h-10 w-10 place-items-center rounded-lg text-lg font-black ${tones[tone]}`}>{icon}</span>
+        <span className={`text-base font-medium ${deltaTone}`}>{delta}</span>
       </div>
-      {appointments.length === 0 ? (
-        <div className="border-t border-[#d7dbea] p-6"><EmptyState label="No appointments scheduled yet." /></div>
-      ) : (
-        appointments.map((appointment) => (
-          <div key={appointment._id} className="grid grid-cols-[1.4fr_1fr_.8fr_.7fr_1fr_.7fr] items-center border-t border-[#d7dbea] px-6 py-6">
-            <div className="flex items-center gap-4"><Avatar name={appointment.patientName} className="h-12 w-12" /><b>{appointment.patientName}</b></div>
-            <span>{appointment.doctor?.user?.name ?? "Unassigned"}</span>
-            <StatusPill tone={priorityTone(appointment.priority)}>P{appointment.priority}</StatusPill>
-            <b className="text-[#0755d9]">#{appointment.tokenNumber}</b>
-            <StatusPill tone={statusTone(appointment.status)}>{appointment.status}</StatusPill>
-            <b>{appointment.status === "waiting" ? `${appointment.estimatedWait} min` : "--"}</b>
+      <div className="mt-5 text-sm font-medium text-slate-700">{label}</div>
+      <div className="mt-1 text-2xl font-black">{value}</div>
+    </section>
+  );
+}
+
+function AppointmentTable({ appointments }: { appointments: Appointment[] }) {
+  const pageSize = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(appointments.length / pageSize));
+  const safePage = Math.min(currentPage, pageCount);
+  const startIndex = (safePage - 1) * pageSize;
+  const rows = appointments.slice(startIndex, startIndex + pageSize);
+  const visiblePages = getVisiblePages(safePage, pageCount);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, pageCount)));
+  };
+
+  return (
+    <section className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+      <div className="min-w-[860px]">
+        <div className="grid grid-cols-[1.25fr_1.15fr_.85fr_.7fr_1.1fr_.7fr_.35fr] bg-[#fbfaff] px-6 py-4 text-xs font-black uppercase tracking-[0.14em] text-slate-700">
+          <span>Patient</span><span>Doctor</span><span>Priority</span><span>Token</span><span>Status</span><span>Est. Wait</span><span>Actions</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="border-t border-[#d7dbea] p-6"><EmptyState label="No appointments scheduled yet." /></div>
+        ) : (
+          rows.map((appointment) => (
+            <div key={appointment._id} className="grid grid-cols-[1.25fr_1.15fr_.85fr_.7fr_1.1fr_.7fr_.35fr] items-center border-t border-[#d7dbea] px-6 py-5">
+              <div className="flex items-center gap-4">
+                <Avatar name={appointment.patientName} className="h-11 w-11 border-0 bg-[#eef0fb]" />
+                <div>
+                  <b>{appointment.patientName}</b>
+                  <p className="text-sm text-slate-600">ID: #{appointment.tokenNumber.toString().padStart(5, "0")}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Avatar name={appointment.doctor?.user?.name ?? "Doctor"} className="h-8 w-8 border-0 grayscale" />
+                <span>{appointment.doctor?.user?.name ?? "Unassigned"}</span>
+              </div>
+              <AppointmentPriority priority={appointment.priority} />
+              <b className="text-[#0755d9]">A-{appointment.tokenNumber.toString().padStart(2, "0")}</b>
+              <AppointmentStatus status={appointment.status} />
+              <b className={appointment.status === "waiting" ? "text-red-700" : "text-slate-600"}>{appointment.status === "waiting" ? `${appointment.estimatedWait} min` : "--"}</b>
+              <button className="text-2xl font-black text-slate-700" aria-label={`Actions for ${appointment.patientName}`}>⋮</button>
+            </div>
+          ))
+        )}
+      </div>
+      {appointments.length > 0 && (
+        <div className="flex flex-col gap-4 border-t border-[#d7dbea] px-6 py-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+          <span>Showing {startIndex + 1} to {Math.min(startIndex + pageSize, appointments.length)} of {appointments.length} appointments</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={safePage === 1}
+              onClick={() => goToPage(safePage - 1)}
+              className="grid h-10 min-w-10 place-items-center rounded-lg border border-[#c4c9dc] bg-white px-3 font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label="Previous page"
+            >
+              ‹
+            </button>
+            {visiblePages.map((page, index) => (
+              page === "..." ? (
+                <span key={`ellipsis-${index}`} className="grid h-10 min-w-10 place-items-center rounded-lg border border-[#c4c9dc] bg-white px-3 font-bold text-slate-700">
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => goToPage(page)}
+                  className={`grid h-10 min-w-10 place-items-center rounded-lg border border-[#c4c9dc] px-3 font-bold ${page === safePage ? "bg-[#0755d9] text-white" : "bg-white text-slate-700"}`}
+                  aria-current={page === safePage ? "page" : undefined}
+                >
+                  {page}
+                </button>
+              )
+            ))}
+            <button
+              type="button"
+              disabled={safePage === pageCount}
+              onClick={() => goToPage(safePage + 1)}
+              className="grid h-10 min-w-10 place-items-center rounded-lg border border-[#c4c9dc] bg-white px-3 font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label="Next page"
+            >
+              ›
+            </button>
           </div>
-        ))
+        </div>
       )}
+    </section>
+  );
+}
+
+function getVisiblePages(currentPage: number, pageCount: number): Array<number | "..."> {
+  if (pageCount <= 5) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 3) {
+    return [1, 2, 3, "...", pageCount];
+  }
+
+  if (currentPage >= pageCount - 2) {
+    return [1, "...", pageCount - 2, pageCount - 1, pageCount];
+  }
+
+  return [1, "...", currentPage, "...", pageCount];
+}
+
+function AppointmentPriority({ priority }: { priority: number }) {
+  if (priority <= 1) {
+    return <span className="w-fit rounded-full bg-red-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-red-700">Urgent</span>;
+  }
+  if (priority <= 2) {
+    return <span className="w-fit rounded-full bg-orange-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-orange-800">High</span>;
+  }
+  return <span className="w-fit rounded-full bg-slate-200 px-3 py-1 text-xs font-black uppercase tracking-wide text-slate-700">Normal</span>;
+}
+
+function AppointmentStatus({ status }: { status: Appointment["status"] }) {
+  const labels: Record<Appointment["status"], string> = {
+    waiting: "Waiting",
+    serving: "In Consultation",
+    completed: "Checked Out",
+    cancelled: "Cancelled",
+  };
+  const tones: Record<Appointment["status"], string> = {
+    waiting: "bg-blue-100 text-[#0755d9]",
+    serving: "bg-emerald-100 text-emerald-800",
+    completed: "bg-slate-200 text-slate-700",
+    cancelled: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <span className={`w-fit rounded-full px-3 py-1 text-xs font-black ${tones[status]}`}>
+      <span className="mr-2">●</span>{labels[status]}
+    </span>
+  );
+}
+
+function AppointmentBarChart({ values }: { values: number[] }) {
+  return (
+    <div className="mt-8">
+      <div className="flex h-56 items-end gap-2 sm:gap-4">
+        {values.map((value, index) => (
+          <span
+            key={`${value}-${index}`}
+            className={`flex-1 rounded-t-lg ${index === 3 ? "bg-[#9bb7e8]" : "bg-[#c7d7f2]"}`}
+            style={{ height: `${Math.max(16, Math.min(100, value))}%` }}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-4 text-sm text-slate-700">
+        <span>08:00 AM</span>
+        <span className="text-center">12:00 PM</span>
+        <span className="text-center">04:00 PM</span>
+        <span className="text-right">08:00 PM</span>
+      </div>
     </div>
+  );
+}
+
+function DepartmentOverview({ appointments }: { appointments: Appointment[] }) {
+  const counts = appointments.reduce<Record<string, number>>((acc, appointment) => {
+    const department = appointment.doctor?.department ?? "Unassigned";
+    acc[department] = (acc[department] ?? 0) + 1;
+    return acc;
+  }, {});
+  const departments = Object.entries(counts).slice(0, 3);
+  const rows = departments.length
+    ? departments
+    : [["Cardiology", 12], ["Neurology", 8], ["Pediatrics", 15]] as [string, number][];
+  const tones: Array<"blue" | "green" | "orange"> = ["blue", "green", "orange"];
+  const max = Math.max(...rows.map(([, count]) => count), 1);
+
+  return (
+    <section className="relative rounded-xl border border-[#d7dbea] bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-black">Department Overview</h2>
+      <div className="mt-6 space-y-6">
+        {rows.map(([department, count], index) => (
+          <div key={department}>
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <span className="text-slate-700">{department}</span>
+              <b>{count} Appointments</b>
+            </div>
+            <Progress value={(count / max) * 100} tone={tones[index] ?? "blue"} />
+          </div>
+        ))}
+      </div>
+      <Link href="/reception/dashboard#book-appointment" className="absolute bottom-[-22px] right-[-1px] grid h-16 w-16 place-items-center rounded-full bg-[#0755d9] text-4xl leading-none text-white shadow-lg" aria-label="Book appointment">
+        +
+      </Link>
+    </section>
   );
 }
 
@@ -799,7 +1035,7 @@ export function ReceptionDashboardPage() {
       </div>
 
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <FrontDeskCard title="Book New Patient">
+        <FrontDeskCard title="Book New Patient" id="book-appointment">
           <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
             <label className="block"><span className="font-bold">Patient Full Name</span><input required value={form.patientName} onChange={(e) => setForm((p) => ({ ...p, patientName: e.target.value }))} className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] px-4" placeholder="e.g. Johnathan Smith" /></label>
             <div className="grid grid-cols-2 gap-4">
@@ -907,9 +1143,9 @@ function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; 
   );
 }
 
-function FrontDeskCard({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+function FrontDeskCard({ title, children, action, id }: { title: string; children: ReactNode; action?: ReactNode; id?: string }) {
   return (
-    <section className="rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+    <section id={id} className="scroll-mt-24 rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-[#d7dbea] px-6 py-5">
         <h2 className="text-2xl font-black">{title}</h2>
         {action}

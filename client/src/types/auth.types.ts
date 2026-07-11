@@ -31,4 +31,5 @@ export interface RegisterPayload {
   email: string;
   password: string;
   role: SelfRegisterableRole;
+  department?: string;
 }

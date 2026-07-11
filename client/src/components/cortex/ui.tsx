@@ -29,10 +29,12 @@ const doctorNav: NavItem[] = [
 ];
 
 const receptionNav: NavItem[] = [
-  { label: "Dashboard", href: "/reception/dashboard", icon: "[]" },
-  { label: "Appointments", href: "/reception/appointments", icon: "##" },
-  { label: "Doctors", href: "/reception/doctors", icon: "++" },
-  { label: "Queue", href: "/reception/queue", icon: "::" },
+  { label: "Dashboard", href: "/reception/dashboard", icon: "▦" },
+  { label: "Appointments", href: "/reception/appointments", icon: "▤" },
+  { label: "Doctors", href: "/reception/doctors", icon: "▣" },
+  { label: "Queue", href: "/reception/queue", icon: "◉" },
+  { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
+  { label: "Settings", href: "#", icon: "⚙" },
 ];
 
 const patientNav: NavItem[] = [
@@ -46,8 +48,8 @@ export function AppLogo({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-3">
       {!compact && (
-        <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#0755d9] text-sm font-black text-white shadow-sm">
-          CM
+        <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#2563eb] text-sm font-black text-white shadow-sm">
+          ▣
         </span>
       )}
       <span>
@@ -56,7 +58,7 @@ export function AppLogo({ compact = false }: { compact?: boolean }) {
         </span>
         {!compact && (
           <span className="mt-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-700">
-            Smart Hospital Platform
+            Smart Hospital
           </span>
         )}
       </span>
@@ -120,34 +122,35 @@ export function DashboardShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f6ff] text-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[280px] border-r border-[#c4c9dc] bg-[#f0f2ff] lg:flex lg:flex-col">
-        <div className="px-7 py-8">
+    <div className="min-h-screen bg-[#f8f7ff] text-slate-950">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[276px] border-r border-[#c9cde0] bg-[#f1f3ff] lg:flex lg:flex-col">
+        <div className="flex h-[92px] items-center px-8">
           <AppLogo />
         </div>
-        <nav className="flex-1 space-y-2 px-4">
+        <nav className="flex-1 space-y-3 px-4 pt-6">
           {nav.map((item) => {
             const selected = item.label === active;
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                className={`flex h-12 items-center gap-4 rounded-md px-5 text-[15px] font-medium transition ${
+                className={`flex h-12 items-center gap-4 rounded-lg px-5 text-[15px] font-medium transition ${
                   selected
-                    ? "bg-[#2563eb] text-white shadow-sm"
+                    ? "bg-[#3269ea] text-white shadow-sm"
                     : "text-slate-800 hover:bg-white"
                 }`}
               >
-                <span className="grid h-6 w-6 place-items-center font-black">{item.icon}</span>
+                <span className="grid h-6 w-6 place-items-center text-lg font-black">{item.icon}</span>
                 {item.label}
               </Link>
             );
           })}
         </nav>
-        <div className="border-t border-[#c4c9dc] p-4">
+        <div className="p-4">
+          <div className="mb-4 border-t border-[#c4c9dc]" />
           {role !== "doctor" && role !== "patient" && (
             <Link
-              href="/reception/appointments"
+              href="/reception/dashboard#book-appointment"
               className="mb-5 flex h-14 items-center justify-center gap-3 rounded-lg bg-[#0755d9] px-5 text-base font-bold text-white shadow-sm"
             >
               <span className="text-2xl leading-none">+</span> Book Appointment
@@ -160,27 +163,27 @@ export function DashboardShell({
           )}
           <div className="space-y-3 text-slate-700">
             <Link href="#" className="flex h-10 items-center gap-4 px-4">? Help Center</Link>
-            <button onClick={handleLogout} className="flex h-10 w-full items-center gap-4 px-4 text-left text-red-600">-&gt; Logout</button>
+            <button onClick={handleLogout} className="flex h-10 w-full items-center gap-4 px-4 text-left text-red-600">↪ Logout</button>
           </div>
         </div>
       </aside>
 
-      <header className="sticky top-0 z-10 border-b border-[#c4c9dc] bg-[#fbfaff]/95 backdrop-blur lg:ml-[280px]">
-        <div className="flex h-[68px] items-center gap-5 px-5 lg:px-8">
+      <header className="sticky top-0 z-10 border-b border-[#c4c9dc] bg-[#fbfaff]/95 backdrop-blur lg:ml-[276px]">
+        <div className="flex h-[64px] items-center gap-5 px-5 lg:px-8">
           <div className="lg:hidden">
             <AppLogo compact />
           </div>
           <div className="relative hidden w-full max-w-[430px] sm:block">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">Q</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">⌕</span>
             <input
-              className="h-11 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-12 pr-4 outline-none"
+              className="h-10 w-full rounded-full border border-transparent bg-[#f1f2fb] pl-12 pr-4 outline-none"
               placeholder={searchPlaceholder}
             />
           </div>
-          <div className="ml-auto flex items-center gap-4 text-xl text-[#003fc0]">
-            <button aria-label="Notifications">!</button>
-            <button aria-label="Messages">[]</button>
-            <button aria-label="Calendar">#</button>
+          <div className="ml-auto flex items-center gap-5 text-xl text-slate-900">
+            <button aria-label="Notifications">♙</button>
+            <button aria-label="Messages">▣</button>
+            <button aria-label="Calendar">▤</button>
             <span className="h-8 w-px bg-[#c4c9dc]" />
             <div className="hidden text-right text-sm sm:block">
               <div className="font-bold text-slate-950">{displayName}</div>

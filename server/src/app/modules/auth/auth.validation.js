@@ -9,6 +9,15 @@ const registerValidation = z.object({
         password: z.string().min(6),
 
         role: z.enum(["admin", "doctor", "receptionist"]),
+        department: z.string().trim().min(1).optional(),
+    }).superRefine((body, ctx) => {
+        if (body.role === "doctor" && !body.department) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["department"],
+                message: "Department is required for doctor accounts",
+            });
+        }
     }),
 });
 
