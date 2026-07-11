@@ -35,7 +35,40 @@ const listDoctors = catchAsync(
     }
 );
 
+const updateDoctor = catchAsync(
+    async (req, res) => {
+
+        const result = await DoctorService.updateDoctor(
+            req.params.id,
+            req.body
+        );
+
+        sendResponse(res, {
+            statusCode: 200,
+            message: "Doctor updated successfully",
+            data: result,
+        });
+
+    }
+);
+
+const deleteDoctor = catchAsync(
+    async (req, res) => {
+
+        await DoctorService.deleteDoctor(req.params.id);
+
+        sendResponse(res, {
+            statusCode: 200,
+            message: "Doctor removed successfully",
+            data: null,
+        });
+
+    }
+);
+
 module.exports = {
     createDoctor,
     listDoctors,
+    updateDoctor,
+    deleteDoctor,
 };

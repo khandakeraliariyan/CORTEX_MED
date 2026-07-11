@@ -383,20 +383,65 @@ export function BarChart({ values, stacked = false }: { values?: number[]; stack
   );
 }
 
-export function HeatMap({ rows = 7, columns = 12 }: { rows?: number; columns?: number }) {
-  return (
-    <div className="space-y-2">
+const HEATMAP_RAMP = ["#eef0fb", "#8fb0ee", "#6f95e8", "#3f6cd6", "#0b3fa8"];
+
+function heatCellColor(value: number, max: number): string {
+  if (value <= 0 || max <= 0) return HEATMAP_RAMP[0];
+  const step = Math.min(3, Math.ceil((value / max) * 4) - 1);
+  return HEATMAP_RAMP[1 + Math.max(0, step)];
+}
+
+export function HeatMap({
+  rowLabels,
+  columnLabels,
+  data,
+}: {
+  rowLabels?: string[];
+  columnLabels?: string[];
+  data?: number[][];
+}) {
+  if (!data || data.length === 0 || data.every((row) => row.every((value) => value === 0))) {
+    const rows = rowLabels?.length ?? 7;
+    const columns = columnLabels?.length ?? 12;
+    return (
       <div className="space-y-2">
         {Array.from({ length: rows }).map((_, row) => (
           <div key={row} className="grid gap-1" style={{ gridTemplateColumns: `36px repeat(${columns}, minmax(0, 1fr))` }}>
-            <span className="text-sm text-slate-400">--</span>
+            <span className="text-sm text-slate-400">{rowLabels?.[row] ?? "--"}</span>
             {Array.from({ length: columns }).map((_, index) => (
-              <span key={`${row}-${index}`} className="h-7 rounded bg-[#eef0fb]" />
+              <span key={`${row}-${index}`} className="h-7 rounded border border-[#d7dbea] bg-[#eef0fb]" />
             ))}
           </div>
         ))}
+        <p className="pt-2 text-center text-sm italic text-slate-500">No activity data available yet</p>
       </div>
-      <p className="pt-2 text-center text-sm italic text-slate-500">No activity data available yet</p>
+    );
+  }
+
+  const max = Math.max(...data.flat(), 1);
+
+  return (
+    <div className="space-y-2">
+      {data.map((row, rowIndex) => (
+        <div key={rowIndex} className="grid gap-1" style={{ gridTemplateColumns: `36px repeat(${row.length}, minmax(0, 1fr))` }}>
+          <span className="text-sm text-slate-500">{rowLabels?.[rowIndex] ?? rowIndex}</span>
+          {row.map((value, colIndex) => (
+            <span
+              key={`${rowIndex}-${colIndex}`}
+              title={`${columnLabels?.[colIndex] ?? colIndex}: ${value} appointment${value === 1 ? "" : "s"}`}
+              className="h-7 rounded border border-[#d7dbea]"
+              style={{ backgroundColor: heatCellColor(value, max) }}
+            />
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center justify-end gap-2 pt-2 text-xs text-slate-500">
+        <span>Fewer</span>
+        {HEATMAP_RAMP.map((color) => (
+          <span key={color} className="h-3 w-5 rounded-sm border border-[#d7dbea]" style={{ backgroundColor: color }} />
+        ))}
+        <span>More</span>
+      </div>
     </div>
   );
 }

@@ -28,6 +28,29 @@ const createDoctorValidation = z.object({
     }),
 });
 
+const updateDoctorValidation = z.object({
+    body: z.object({
+        department: z.string().optional(),
+
+        specialty: z.string().optional(),
+
+        room: z.string().optional(),
+
+        consultationFee: z.number().optional(),
+
+        avgConsultationTime: z.number().optional(),
+
+        workingDays: z.array(z.string()).optional(),
+
+        startTime: z.string().optional(),
+
+        endTime: z.string().optional(),
+
+        status: z.enum(["available", "unavailable", "on_leave"]).optional(),
+    }),
+});
+
 module.exports = {
     createDoctorValidation,
+    updateDoctorValidation,
 };

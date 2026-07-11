@@ -25,7 +25,12 @@ import { login, register } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
 import type { SelfRegisterableRole } from "@/types/auth.types";
-import { useCreateDoctor, useDoctors } from "@/features/doctor/hooks/use-doctors";
+import {
+  useCreateDoctor,
+  useDeleteDoctor,
+  useDoctors,
+  useUpdateDoctor,
+} from "@/features/doctor/hooks/use-doctors";
 import type { Doctor } from "@/features/doctor/types/doctor.types";
 import {
   useAppointments,
@@ -38,6 +43,16 @@ import {
   useCompletePatient,
   useQueue,
 } from "@/features/queue/hooks/use-queue";
+import { useHospitalAnalytics } from "@/features/analytics/hooks/use-hospital-analytics";
+import type { DoctorPerformanceRow } from "@/features/analytics/types/analytics.types";
+
+function normalizeToHeights(counts: number[]): number[] {
+  const max = Math.max(...counts, 1);
+  return counts.map((count) => Math.max(8, Math.round((count / max) * 100)));
+}
+
+const HOUR_BUCKET_LABELS = ["00", "02", "04", "06", "08", "10", "12", "14", "16", "18", "20", "22"];
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function getErrorMessage(error: unknown): string {
   if (isAxiosError(error)) {
@@ -487,17 +502,32 @@ export function RegisterPage() {
   );
 }
 
+function departmentUtilization(appointments: Appointment[]): Array<{ department: string; waiting: number; percent: number }> {
+  const waiting = appointments.filter((a) => a.status === "waiting");
+  const counts = new Map<string, number>();
+  waiting.forEach((a) => {
+    const department = a.doctor?.department ?? "Unassigned";
+    counts.set(department, (counts.get(department) ?? 0) + 1);
+  });
+  const total = waiting.length || 1;
+  return Array.from(counts.entries())
+    .map(([department, count]) => ({ department, waiting: count, percent: Math.round((count / total) * 100) }))
+    .sort((a, b) => b.waiting - a.waiting)
+    .slice(0, 4);
+}
+
 export function AdminDashboardPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
+  const analytics = useHospitalAnalytics(appointments, doctors);
 
   const waitingCount = appointments.filter((a) => a.status === "waiting").length;
   const criticalCount = appointments.filter((a) => a.priority <= 2 && a.status === "waiting").length;
-  const avgWait = waitingCount
-    ? Math.round(
-        appointments.filter((a) => a.status === "waiting").reduce((sum, a) => sum + a.estimatedWait, 0) / waitingCount
-      )
-    : 0;
+  const utilization = departmentUtilization(appointments);
+  const recentAppointments = [...appointments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+  const onDuty = doctors.filter((d) => d.status === "available").slice(0, 4);
 
   return (
     <DashboardShell role="admin" active="Dashboard">
@@ -509,17 +539,21 @@ export function AdminDashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon="+" label="Total Doctors" value={String(doctors.length)} />
         <MetricCard icon="O" label="Appointments Today" value={String(appointments.length)} tone="green" />
-        <MetricCard icon="!" label="Average Wait" value={waitingCount ? `${avgWait}m` : "--"} tone="orange" />
+        <MetricCard icon="!" label="Average Wait" value={waitingCount ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
         <MetricCard icon="!" label="Critical Cases" value={String(criticalCount)} tone="red" />
       </div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Queue Length Trend" subtitle="Live occupancy and waiting line volume"><BarChart /></Panel>
-        <Panel title="Hospital Utilization" subtitle="Departmental capacity usage">
+        <Panel title="Queue Length Trend" subtitle="Appointments booked today, by hour"><BarChart values={normalizeToHeights(analytics.hourlyVolume)} /></Panel>
+        <Panel title="Hospital Utilization" subtitle="Share of waiting queue by department">
           <div className="space-y-5">
-            {["Emergency Ward", "Outpatient (OPD)", "Imaging & Lab", "Pediatrics"].map((label) => (
-              <div key={label}><div className="mb-2 flex justify-between"><span>{label}</span><b>--</b></div><Progress value={0} /></div>
-            ))}
-            <Button variant="secondary" className="w-full">View Department Details</Button>
+            {utilization.length === 0 ? (
+              <EmptyState label="No patients waiting." />
+            ) : (
+              utilization.map(({ department, waiting, percent }) => (
+                <div key={department}><div className="mb-2 flex justify-between"><span>{department}</span><b>{waiting} waiting</b></div><Progress value={percent} /></div>
+              ))
+            )}
+            <Link href="/reception/appointments"><Button variant="secondary" className="w-full">View Department Details</Button></Link>
           </div>
         </Panel>
       </div>
@@ -528,11 +562,36 @@ export function AdminDashboardPage() {
           <DoctorTable doctors={doctors} />
         </Panel>
         <Panel title="Recent Activity">
-          <EmptyState label="No recent activity." />
+          {recentAppointments.length === 0 ? (
+            <EmptyState label="No recent activity." />
+          ) : (
+            <div className="space-y-5">
+              {recentAppointments.map((appointment) => (
+                <div key={appointment._id} className="flex gap-4">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${appointment.status === "completed" ? "bg-emerald-100 text-emerald-700" : appointment.status === "serving" ? "bg-blue-100 text-[#0755d9]" : "bg-orange-100 text-orange-700"}`}>✓</span>
+                  <div>
+                    <b>{appointment.status === "completed" ? `Completed: ${appointment.patientName}` : appointment.status === "serving" ? `In consultation: ${appointment.patientName}` : `Check-in: ${appointment.patientName}`}</b>
+                    <p className="text-sm text-slate-700">Token #{appointment.tokenNumber} - {appointment.doctor?.user?.name ?? "Unassigned"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Panel>
       </div>
-      <Panel title="Reception & Support" className="mt-6">
-        <EmptyState label="No reception staff on shift yet." />
+      <Panel title="Doctors on Duty" className="mt-6">
+        {onDuty.length === 0 ? (
+          <EmptyState label="No doctors currently available." />
+        ) : (
+          <div className="grid gap-6 md:grid-cols-4">
+            {onDuty.map((doctor) => (
+              <div key={doctor._id} className="flex items-center gap-4 rounded-xl border border-[#d7dbea] p-4">
+                <Avatar name={doctor.user.name} className="h-12 w-12" />
+                <div><b>{doctor.user.name}</b><p className="text-sm text-slate-600">{doctor.department}</p></div>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
     </DashboardShell>
   );
@@ -834,11 +893,87 @@ function DepartmentOverview({ appointments }: { appointments: Appointment[] }) {
   );
 }
 
+function DoctorEditForm({
+  doctor,
+  onDone,
+}: {
+  doctor: Doctor;
+  onDone: () => void;
+}) {
+  const updateDoctor = useUpdateDoctor();
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    department: doctor.department,
+    specialty: doctor.specialty,
+    room: doctor.room,
+    consultationFee: String(doctor.consultationFee),
+    avgConsultationTime: String(doctor.avgConsultationTime),
+    startTime: doctor.startTime,
+    endTime: doctor.endTime,
+    status: doctor.status,
+  });
+
+  const updateField = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await updateDoctor.mutateAsync({
+        id: doctor._id,
+        payload: {
+          department: form.department,
+          specialty: form.specialty,
+          room: form.room,
+          consultationFee: Number(form.consultationFee),
+          avgConsultationTime: Number(form.avgConsultationTime),
+          startTime: form.startTime,
+          endTime: form.endTime,
+          status: form.status as Doctor["status"],
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 p-7">
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block text-sm"><span className="font-bold">Department</span><input required value={form.department} onChange={updateField("department")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Specialty</span><input required value={form.specialty} onChange={updateField("specialty")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Room</span><input required value={form.room} onChange={updateField("room")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Status</span>
+          <select value={form.status} onChange={updateField("status")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3">
+            <option value="available">Available</option>
+            <option value="unavailable">Unavailable</option>
+            <option value="on_leave">On Leave</option>
+          </select>
+        </label>
+        <label className="block text-sm"><span className="font-bold">Avg. Consultation (min)</span><input required type="number" min={5} value={form.avgConsultationTime} onChange={updateField("avgConsultationTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Consultation Fee</span><input required type="number" min={0} value={form.consultationFee} onChange={updateField("consultationFee")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Start Time</span><input required value={form.startTime} onChange={updateField("startTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">End Time</span><input required value={form.endTime} onChange={updateField("endTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+      </div>
+      {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+      <div className="flex justify-end gap-3">
+        <Button type="button" variant="secondary" onClick={onDone}>Cancel</Button>
+        <Button type="submit" disabled={updateDoctor.isPending} className="disabled:opacity-60">{updateDoctor.isPending ? "Saving..." : "Save Changes"}</Button>
+      </div>
+    </form>
+  );
+}
+
 export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "receptionist" }) {
   const { data: doctors = [], isLoading } = useDoctors();
   const createDoctor = useCreateDoctor();
+  const deleteDoctor = useDeleteDoctor();
   const canManageDoctors = role === "admin";
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -924,18 +1059,47 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
           <div className="grid gap-7 xl:grid-cols-3">
             {doctors.map((doctor) => (
               <div key={doctor._id} className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
-                <div className="relative h-48 bg-gradient-to-br from-sky-200 via-slate-100 to-blue-200">
-                  <StatusPill tone={doctor.status === "available" ? "green" : doctor.status === "on_leave" ? "orange" : "slate"}>{doctor.status.replace("_", " ")}</StatusPill>
-                </div>
-                <div className="p-7">
-                  <div className="flex justify-between"><h2 className="text-2xl font-black">{doctor.user.name}</h2><span className="rounded-lg bg-[#e8e9f5] px-4 py-2 font-bold">{doctor.room}</span></div>
-                  <p className="mt-2 font-bold text-[#0755d9]">{doctor.department} - {doctor.specialty}</p>
-                  <div className="mt-6 grid grid-cols-2 border-t border-[#d7dbea] pt-5"><div><b className="text-slate-500">WORKING HOURS</b><p>{doctor.startTime} - {doctor.endTime}</p></div><div><b className="text-slate-500">AVG. CONSULT</b><p>{doctor.avgConsultationTime} mins</p></div></div>
-                  <div className="mt-7 flex gap-4">
-                    <Button variant="secondary">Profile</Button>
-                    {canManageDoctors && <><Button variant="secondary">Edit</Button><Button variant="secondary">Del</Button></>}
-                  </div>
-                </div>
+                {editingId === doctor._id ? (
+                  <DoctorEditForm doctor={doctor} onDone={() => setEditingId(null)} />
+                ) : (
+                  <>
+                    <div className="relative h-48 bg-gradient-to-br from-sky-200 via-slate-100 to-blue-200">
+                      <StatusPill tone={doctor.status === "available" ? "green" : doctor.status === "on_leave" ? "orange" : "slate"}>{doctor.status.replace("_", " ")}</StatusPill>
+                    </div>
+                    <div className="p-7">
+                      <div className="flex justify-between"><h2 className="text-2xl font-black">{doctor.user.name}</h2><span className="rounded-lg bg-[#e8e9f5] px-4 py-2 font-bold">{doctor.room}</span></div>
+                      <p className="mt-2 font-bold text-[#0755d9]">{doctor.department} - {doctor.specialty}</p>
+                      <div className="mt-6 grid grid-cols-2 border-t border-[#d7dbea] pt-5"><div><b className="text-slate-500">WORKING HOURS</b><p>{doctor.startTime} - {doctor.endTime}</p></div><div><b className="text-slate-500">AVG. CONSULT</b><p>{doctor.avgConsultationTime} mins</p></div></div>
+                      {deleteError && deleteDoctor.variables === doctor._id && (
+                        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{deleteError}</p>
+                      )}
+                      <div className="mt-7 flex gap-4">
+                        <Button variant="secondary">Profile</Button>
+                        {canManageDoctors && (
+                          <>
+                            <Button variant="secondary" onClick={() => setEditingId(doctor._id)}>Edit</Button>
+                            <Button
+                              variant="secondary"
+                              disabled={deleteDoctor.isPending}
+                              onClick={async () => {
+                                if (!window.confirm(`Remove ${doctor.user.name} from the staff directory?`)) return;
+                                setDeleteError(null);
+                                try {
+                                  await deleteDoctor.mutateAsync(doctor._id);
+                                } catch (err) {
+                                  setDeleteError(getErrorMessage(err));
+                                }
+                              }}
+                              className="disabled:opacity-60"
+                            >
+                              Del
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -945,25 +1109,45 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   );
 }
 
+function SpecialistPerformanceTable({ rows }: { rows: DoctorPerformanceRow[] }) {
+  if (rows.length === 0) {
+    return <EmptyState label="No practitioners on record yet." />;
+  }
+  return (
+    <div className="-m-6 overflow-hidden">
+      <div className="grid grid-cols-3 bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
+        <span>Practitioner</span><span>Department</span><span className="text-right">Patients Seen</span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.doctorId} className="grid grid-cols-3 items-center border-t border-[#d7dbea] px-6 py-5">
+          <div className="flex items-center gap-3"><Avatar name={row.name} className="h-11 w-11" /><b>{row.name}</b></div>
+          <span>{row.department}</span>
+          <b className="text-right">{row.patientsSeen}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AnalyticsPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
+  const analytics = useHospitalAnalytics(appointments, doctors);
 
-  const critical = appointments.filter((a) => a.priority <= 2).length;
-  const highPriority = appointments.filter((a) => a.priority === 3).length;
-  const routine = appointments.length - critical - highPriority;
+  const waiting = appointments.filter((a) => a.status === "waiting");
+  const { critical, high: highPriority, routine } = analytics.priorityBreakdown;
 
   return (
     <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search analytics...">
       <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." actions={<><Button variant="secondary">Filter Range</Button><Button>Export Report</Button></>} />
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Daily Patients" value={String(appointments.length)} tone="blue" />
-        <MetricCard icon="O" label="Avg Wait Time" value="--" tone="orange" />
-        <MetricCard icon="B" label="Bed Occupancy" value="--" tone="green" />
-        <MetricCard icon="Z" label="ER Efficiency" value="--" tone="blue" />
+        <MetricCard icon="O" label="Avg Wait Time" value={waiting.length ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
+        <MetricCard icon="B" label="Doctor Availability" value={doctors.length ? `${analytics.doctorAvailabilityPercent}%` : "--"} tone="green" />
+        <MetricCard icon="Z" label="ER Efficiency" value={`${analytics.erEfficiencyPercent}%`} tone="blue" />
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Average Wait Time Trend" subtitle="Real-time monitoring across departments"><BarChart /></Panel>
+        <Panel title="Average Wait Time Trend" subtitle="Actual check-in to consult time, by hour"><BarChart values={normalizeToHeights(analytics.waitTimeTrend)} /></Panel>
         <Panel title="Priority Distribution" subtitle="Critical vs Non-emergency cases">
           <Donut total={String(appointments.length)} />
           <div className="mt-8 space-y-4">
@@ -974,8 +1158,12 @@ export function AnalyticsPage() {
         </Panel>
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-2">
-        <Panel title="Queue Utilization" subtitle="Wait density by hour and department"><HeatMap /></Panel>
-        <Panel title="Specialist Performance" subtitle="Patient satisfaction and turnover rates"><DoctorTable doctors={doctors} /></Panel>
+        <Panel title="Queue Utilization" subtitle="Booking density by weekday and hour">
+          <HeatMap data={analytics.weeklyHeatmap} rowLabels={WEEKDAY_LABELS} columnLabels={HOUR_BUCKET_LABELS} />
+        </Panel>
+        <Panel title="Specialist Performance" subtitle="Patients seen per practitioner">
+          <SpecialistPerformanceTable rows={analytics.doctorPerformance} />
+        </Panel>
       </div>
     </DashboardShell>
   );

@@ -1,6 +1,7 @@
 const Doctor = require("./doctor.model");
 
 const User = require("../auth/auth.model");
+const Appointment = require("../appointment/appointment.model");
 
 const AppError = require("../../errors/AppError");
 
@@ -88,7 +89,63 @@ const listDoctors = async () => {
     return await Doctor.find().populate("user", "name email role isActive");
 };
 
+const UPDATABLE_FIELDS = [
+    "department",
+    "specialty",
+    "room",
+    "consultationFee",
+    "avgConsultationTime",
+    "workingDays",
+    "startTime",
+    "endTime",
+    "status",
+];
+
+const updateDoctor = async (id, payload) => {
+    const doctor = await Doctor.findById(id);
+
+    if (!doctor) {
+        throw new AppError(404, "Doctor not found");
+    }
+
+    for (const field of UPDATABLE_FIELDS) {
+        if (payload[field] !== undefined) {
+            doctor[field] = payload[field];
+        }
+    }
+
+    await doctor.save();
+
+    return await doctor.populate("user", "name email role isActive");
+};
+
+const deleteDoctor = async (id) => {
+    const doctor = await Doctor.findById(id);
+
+    if (!doctor) {
+        throw new AppError(404, "Doctor not found");
+    }
+
+    const activeAppointments = await Appointment.countDocuments({
+        doctor: id,
+        status: { $in: ["waiting", "serving"] },
+    });
+
+    if (activeAppointments > 0) {
+        throw new AppError(
+            409,
+            "Cannot remove a doctor with active patients in the queue"
+        );
+    }
+
+    await User.findByIdAndUpdate(doctor.user, { isActive: false });
+
+    await doctor.deleteOne();
+};
+
 module.exports = {
     createDoctor,
     listDoctors,
+    updateDoctor,
+    deleteDoctor,
 };

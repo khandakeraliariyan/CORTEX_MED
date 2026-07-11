@@ -37,3 +37,15 @@ export interface CreateDoctorPayload {
   startTime: string;
   endTime: string;
 }
+
+export interface UpdateDoctorPayload {
+  department?: string;
+  specialty?: string;
+  room?: string;
+  consultationFee?: number;
+  avgConsultationTime?: number;
+  workingDays?: string[];
+  startTime?: string;
+  endTime?: string;
+  status?: Doctor["status"];
+}
