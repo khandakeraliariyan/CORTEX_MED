@@ -151,11 +151,15 @@ export function DashboardShell({
   role,
   active,
   searchPlaceholder = "Search medical records...",
+  searchValue,
+  onSearchChange,
   children,
 }: {
   role: DashboardRole;
   active: string;
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   children: ReactNode;
 }) {
   const nav = sidebarNavFor(role);
@@ -227,6 +231,8 @@ export function DashboardShell({
             <input
               className="h-10 w-full rounded-full border border-transparent bg-[#f1f2fb] pl-12 pr-4 outline-none"
               placeholder={searchPlaceholder}
+              value={searchValue ?? undefined}
+              onChange={onSearchChange ? (event) => onSearchChange(event.target.value) : undefined}
             />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl text-slate-900">

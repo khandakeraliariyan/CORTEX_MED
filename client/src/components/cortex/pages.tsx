@@ -535,7 +535,6 @@ export function AdminDashboardPage() {
       <PageTitle
         title="Analytics Overview"
         subtitle="Live hospital performance metrics."
-        actions={<><Button variant="secondary">Filters</Button><Button>Export Report</Button></>}
       />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon="+" label="Total Doctors" value={String(doctors.length)} />
@@ -620,8 +619,20 @@ function DoctorTable({ doctors }: { doctors: Doctor[] }) {
   );
 }
 
+function matchesSearch(appointment: Appointment, term: string): boolean {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return true;
+  return (
+    appointment.patientName.toLowerCase().includes(needle) ||
+    appointment.appointmentCode.toLowerCase().includes(needle) ||
+    String(appointment.tokenNumber).includes(needle) ||
+    (appointment.doctor?.user?.name ?? "").toLowerCase().includes(needle)
+  );
+}
+
 export function AppointmentManagementPage() {
   const { data: appointments = [], isLoading } = useAppointments();
+  const [search, setSearch] = useState("");
 
   const waiting = appointments.filter((a) => a.status === "waiting");
   const urgent = appointments.filter((a) => a.priority <= 2).length;
@@ -633,18 +644,13 @@ export function AppointmentManagementPage() {
   const barValues = appointments.length
     ? appointments.slice(0, 10).map((appointment) => Math.max(24, Math.min(96, appointment.estimatedWait * 4 || 28)))
     : [38, 62, 48, 82, 67, 57, 43, 33, 52, 72];
+  const visibleAppointments = appointments.filter((a) => matchesSearch(a, search));
 
   return (
-    <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients...">
+    <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle
         title="Appointment Management"
         subtitle="Real-time scheduling and patient flow optimization."
-        actions={
-          <>
-            <Button variant="secondary" className="h-12 rounded-xl px-5">▾ Filter View</Button>
-            <Button variant="secondary" className="h-12 rounded-xl px-5">⌄ Export PDF</Button>
-          </>
-        }
       />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <ReceptionMetric icon="♚" label="Total Scheduled" value={String(appointments.length || 0)} delta="+12%" tone="blue" />
@@ -655,7 +661,7 @@ export function AppointmentManagementPage() {
       {isLoading ? (
         <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading appointments..." /></div>
       ) : (
-        <AppointmentTable appointments={appointments} />
+        <AppointmentTable appointments={visibleAppointments} />
       )}
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <section className="rounded-xl border border-[#d7dbea] bg-white p-6 shadow-sm">
@@ -976,6 +982,7 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -991,6 +998,16 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
 
   const available = doctors.filter((d) => d.status === "available").length;
   const onLeave = doctors.filter((d) => d.status === "on_leave").length;
+  const visibleDoctors = search.trim()
+    ? doctors.filter((doctor) => {
+        const needle = search.trim().toLowerCase();
+        return (
+          doctor.user.name.toLowerCase().includes(needle) ||
+          doctor.department.toLowerCase().includes(needle) ||
+          doctor.specialty.toLowerCase().includes(needle)
+        );
+      })
+    : doctors;
 
   const updateField = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -1018,11 +1035,11 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   };
 
   return (
-    <DashboardShell role={role} active="Doctors" searchPlaceholder="Search medical staff...">
+    <DashboardShell role={role} active="Doctors" searchPlaceholder="Search medical staff..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle
         title="Medical Staff Directory"
         subtitle="View department heads, clinicians, and surgical teams in real-time."
-        actions={canManageDoctors ? <><Button variant="secondary">All Departments</Button><Button onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Add Doctor"}</Button></> : <Button variant="secondary">All Departments</Button>}
+        actions={canManageDoctors ? <Button onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Add Doctor"}</Button> : undefined}
       />
 
       {canManageDoctors && open && (
@@ -1054,11 +1071,11 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
       <div className="mt-8">
         {isLoading ? (
           <EmptyState label="Loading staff directory..." />
-        ) : doctors.length === 0 ? (
-          <EmptyState label="No staff members added yet." />
+        ) : visibleDoctors.length === 0 ? (
+          <EmptyState label={doctors.length === 0 ? "No staff members added yet." : "No staff match your search."} />
         ) : (
           <div className="grid gap-7 xl:grid-cols-3">
-            {doctors.map((doctor) => (
+            {visibleDoctors.map((doctor) => (
               <div key={doctor._id} className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
                 {editingId === doctor._id ? (
                   <DoctorEditForm doctor={doctor} onDone={() => setEditingId(null)} />
@@ -1134,13 +1151,20 @@ export function AnalyticsPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
   const analytics = useHospitalAnalytics(appointments, doctors);
+  const [search, setSearch] = useState("");
 
   const waiting = appointments.filter((a) => a.status === "waiting");
   const { critical, high: highPriority, routine } = analytics.priorityBreakdown;
+  const visiblePerformance = search.trim()
+    ? analytics.doctorPerformance.filter((row) =>
+        row.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+        row.department.toLowerCase().includes(search.trim().toLowerCase())
+      )
+    : analytics.doctorPerformance;
 
   return (
-    <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search analytics...">
-      <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." actions={<><Button variant="secondary">Filter Range</Button><Button>Export Report</Button></>} />
+    <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search practitioners..." searchValue={search} onSearchChange={setSearch}>
+      <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." />
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Daily Patients" value={String(appointments.length)} tone="blue" />
         <MetricCard icon="O" label="Avg Wait Time" value={waiting.length ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
@@ -1163,7 +1187,7 @@ export function AnalyticsPage() {
           <HeatMap data={analytics.weeklyHeatmap} rowLabels={WEEKDAY_LABELS} columnLabels={HOUR_BUCKET_LABELS} />
         </Panel>
         <Panel title="Specialist Performance" subtitle="Patients seen per practitioner">
-          <SpecialistPerformanceTable rows={analytics.doctorPerformance} />
+          <SpecialistPerformanceTable rows={visiblePerformance} />
         </Panel>
       </div>
     </DashboardShell>
@@ -1182,6 +1206,11 @@ export function ReceptionDashboardPage() {
   const avgWait = waiting.length
     ? Math.round(waiting.reduce((sum, a) => sum + a.estimatedWait, 0) / waiting.length)
     : 0;
+
+  const [queueSearch, setQueueSearch] = useState("");
+  const visibleWaiting = queueSearch.trim()
+    ? waiting.filter((a) => a.patientName.toLowerCase().includes(queueSearch.trim().toLowerCase()))
+    : waiting;
 
   const [form, setForm] = useState({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
   const [error, setError] = useState<string | null>(null);
@@ -1210,7 +1239,7 @@ export function ReceptionDashboardPage() {
   };
 
   return (
-    <FrontDeskDashboardShell userName={currentUser?.name ?? "Front Desk"}>
+    <FrontDeskDashboardShell userName={currentUser?.name ?? "Front Desk"} searchValue={queueSearch} onSearchChange={setQueueSearch}>
       <div className="mb-7">
         <h1 className="text-4xl font-black tracking-tight">Analytics Overview</h1>
         <p className="mt-1 text-lg text-slate-700">Hospital performance metrics for today.</p>
@@ -1257,7 +1286,7 @@ export function ReceptionDashboardPage() {
           </form>
         </FrontDeskCard>
         <FrontDeskCard title="Live Queue" action={<StatusPill>{waiting.length} Live</StatusPill>}>
-          <LiveQueueCards patients={waiting.slice(0, 5)} />
+          <LiveQueueCards patients={visibleWaiting.slice(0, 5)} />
         </FrontDeskCard>
       </div>
 
@@ -1271,7 +1300,17 @@ export function ReceptionDashboardPage() {
   );
 }
 
-function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; userName: string }) {
+function FrontDeskDashboardShell({
+  children,
+  userName,
+  searchValue,
+  onSearchChange,
+}: {
+  children: ReactNode;
+  userName: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+}) {
   const router = useRouter();
   const clearSession = useAuthStore((state) => state.clearSession);
 
@@ -1314,7 +1353,12 @@ function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; 
         <div className="flex h-[64px] items-center gap-5 px-6">
           <div className="relative w-full max-w-[390px]">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">⌕</span>
-            <input className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none" placeholder="Search medical records..." />
+            <input
+              className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none"
+              placeholder="Search live queue by patient name..."
+              value={searchValue ?? undefined}
+              onChange={onSearchChange ? (event) => onSearchChange(event.target.value) : undefined}
+            />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl">
             <NotificationBell />
@@ -1561,16 +1605,20 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
   const { data: doctorAppointments = [] } = useAppointments(doctorId ?? undefined);
   const callNext = useCallNextPatient(doctorId);
   const completePatient = useCompletePatient(doctorId);
+  const [search, setSearch] = useState("");
 
   const current = queue?.current ?? null;
   const waiting = queue?.waiting ?? [];
+  const visibleWaiting = search.trim()
+    ? waiting.filter((a) => a.patientName.toLowerCase().includes(search.trim().toLowerCase()) || String(a.tokenNumber).includes(search.trim()))
+    : waiting;
   const stats = queue?.stats;
   const recentActivity = [...doctorAppointments]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
 
   return (
-    <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Patients Waiting" value={String(waiting.length)} />
         <MetricCard icon="O" label="Avg. Consultation" value={stats ? `${stats.avgConsultationTime}m` : "--"} tone="green" />
@@ -1615,7 +1663,11 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Panel title="Patient Queue" action={<Button variant="secondary" disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">Call Next Patient</Button>}>
-          {waiting.length === 0 ? <EmptyState label="No patients waiting." /> : <div className="space-y-4">{waiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>}
+          {visibleWaiting.length === 0 ? (
+            <EmptyState label={waiting.length === 0 ? "No patients waiting." : "No patients match your search."} />
+          ) : (
+            <div className="space-y-4">{visibleWaiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>
+          )}
         </Panel>
         <Panel title="Timeline">
           {recentActivity.length === 0 ? (
@@ -1712,12 +1764,14 @@ export function DoctorEmergencyIntakePage() {
 export function DoctorHistoryPage() {
   const user = useAuthStore((state) => state.user);
   const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+  const [search, setSearch] = useState("");
 
   const completed = appointments.filter((a) => a.status === "completed").length;
   const cancelled = appointments.filter((a) => a.status === "cancelled").length;
+  const visibleAppointments = appointments.filter((a) => matchesSearch(a, search));
 
   return (
-    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle title="Consultation History" subtitle="Every appointment you have handled, most recent first." />
       <div className="grid gap-6 md:grid-cols-3">
         <MetricCard icon="P" label="Total Appointments" value={String(appointments.length)} />
@@ -1728,7 +1782,7 @@ export function DoctorHistoryPage() {
         <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading history..." /></div>
       ) : (
         <div className="mt-7">
-          <AppointmentTable appointments={appointments} />
+          <AppointmentTable appointments={visibleAppointments} />
         </div>
       )}
     </DashboardShell>
@@ -1773,10 +1827,14 @@ function summarizePatients(appointments: Appointment[]): PatientSummary[] {
 export function DoctorPatientsPage() {
   const user = useAuthStore((state) => state.user);
   const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
-  const patients = summarizePatients(appointments);
+  const [search, setSearch] = useState("");
+  const allPatients = summarizePatients(appointments);
+  const patients = search.trim()
+    ? allPatients.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()) || p.phone.includes(search.trim()))
+    : allPatients;
 
   return (
-    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle title="My Patients" subtitle="Everyone you have treated, with their visit history." />
       <div className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
         <div className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
@@ -1785,7 +1843,7 @@ export function DoctorPatientsPage() {
         {isLoading ? (
           <div className="p-6"><EmptyState label="Loading patients..." /></div>
         ) : patients.length === 0 ? (
-          <div className="p-6"><EmptyState label="No patients treated yet." /></div>
+          <div className="p-6"><EmptyState label={allPatients.length === 0 ? "No patients treated yet." : "No patients match your search."} /></div>
         ) : (
           patients.map((patient) => (
             <div key={patient.key} className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] items-center border-t border-[#d7dbea] px-6 py-5">
