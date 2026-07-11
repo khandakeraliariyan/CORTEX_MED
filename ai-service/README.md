@@ -75,7 +75,25 @@ Priority scale: `1` critical, `2` urgent, `3` moderate, `4` mild, `5` non-urgent
 ### `GET /health`
 
 Returns the configured backend/model so you can confirm what's wired up
-without triggering an inference call.
+without triggering an inference call. The Express backend proxies this at
+`GET /api/v1/triage/engine-status` (admin-only) so the admin dashboard can
+show live AI availability — see [server/README.md](../server/README.md#triage-apiv1triage).
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and adjust as needed:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8000` | Port the FastAPI service listens on |
+| `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |
+| `LLM_BACKEND` | `ollama` | `ollama` for local dev, `vllm` for the AMD/ROCm hackathon demo box |
+| `LLM_BASE_URL` | `http://localhost:11434` | Base URL of the LLM server |
+| `LLM_MODEL` | `llama3.1:8b-instruct-q4_0` | Model name/tag to request |
+| `LLM_TIMEOUT_SECONDS` | `8` | Timeout for a single LLM call |
+| `LLM_TEMPERATURE` | `0.2` | Sampling temperature — kept low for consistent, parseable JSON output |
+| `MAX_RETRIES` | `1` | Retries on LLM failure/unparseable output before falling back to the neutral response |
+| `RETRY_BACKOFF_SECONDS` | `0.5` | Linear backoff between retries |
 
 ## Running locally (Ollama)
 

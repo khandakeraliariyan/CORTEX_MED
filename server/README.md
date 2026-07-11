@@ -1,6 +1,6 @@
 # CORTEX_MED — CORTEX_MED Server
 
-Backend API for **CORTEX_MED**, a hospital/clinic patient-queue and triage management system. It handles authentication, doctor management, appointment booking, AI-assisted patient triage, and a live consultation queue that is broadcast to connected clients in real time over Socket.IO.
+Backend API for **CORTEX_MED**, a hospital/clinic patient-queue and triage management system. It handles authentication, doctor management, appointment booking, AI-assisted patient triage, hospital-wide settings, and a live consultation queue that is broadcast to connected clients in real time over Socket.IO.
 
 ## Table of Contents
 
@@ -17,9 +17,11 @@ Backend API for **CORTEX_MED**, a hospital/clinic patient-queue and triage manag
   - [Appointments](#appointments-apiv1appointments)
   - [Triage](#triage-apiv1triage)
   - [Queue](#queue-apiv1queue)
+  - [Hospital Settings](#hospital-settings-apiv1hospital-settings)
 - [Data Models](#data-models)
 - [Real-Time Events (Socket.IO)](#real-time-events-socketio)
 - [External AI Triage Service](#external-ai-triage-service)
+- [Known Limitations](#known-limitations)
 
 ## Tech Stack
 
@@ -52,18 +54,21 @@ server/
 │       │   └── notFound.js           # 404 handler
 │       ├── routes/index.js       # Mounts all module routers under /api/v1
 │       ├── modules/
-│       │   ├── auth/             # Register, login, refresh, current user
-│       │   ├── doctor/           # Doctor profile management
+│       │   ├── auth/             # Register, login, refresh, current user, password, notification prefs
+│       │   ├── doctor/           # Doctor profile management (CRUD)
 │       │   ├── appointment/      # Appointment booking & tracking
-│       │   ├── triage/           # AI-assisted priority triage
+│       │   ├── triage/           # AI-assisted priority triage + AI engine status check
 │       │   ├── queue/            # Live per-doctor consultation queue
 │       │   ├── wait-time/        # Queue wait-time recalculation
-│       │   └── notification/     # Emits Socket.IO events for queue changes
+│       │   ├── hospital/         # Hospital-wide settings (name, facility ID)
+│       │   ├── notification/     # Socket.IO event emit helpers (no REST route — internal use only)
+│       │   ├── dashboard/        # Reserved for future dashboard-specific endpoints (currently empty)
+│       │   └── analytics/        # Reserved for future analytics endpoints (currently empty — analytics are computed client-side today)
 │       ├── socket/                # Socket.IO server init, events, emit helpers
 │       └── utils/                 # JWT, password hashing, response helpers, code/token generators
 ```
 
-Each domain module (`auth`, `doctor`, `appointment`, `triage`, `queue`) follows the same internal layout:
+Each implemented domain module (`auth`, `doctor`, `appointment`, `triage`, `queue`, `hospital`) follows the same internal layout:
 
 - `*.route.js` — Express router, wires middleware (`auth`, `validateRequest`) to controllers
 - `*.controller.js` — thin HTTP layer, calls the service and sends the response
@@ -71,6 +76,8 @@ Each domain module (`auth`, `doctor`, `appointment`, `triage`, `queue`) follows 
 - `*.validation.js` — Zod request schemas
 - `*.model.js` — Mongoose schema (where applicable)
 - `*.constant.js` — enums (roles, statuses, priorities)
+
+`notification/` only contains a `*.service.js` — it's a set of internal Socket.IO emit helpers called by other modules (queue, appointment), not a routed API. `dashboard/` and `analytics/` are empty scaffolding folders reserved for future work; the analytics currently shown in the client are computed on the frontend from appointment/doctor data rather than from a dedicated backend endpoint.
 
 ## Getting Started
 
@@ -100,8 +107,9 @@ Create a `.env` file in `server/` with the following keys (read in `src/app/conf
 | `JWT_ACCESS_EXPIRES_IN`   | Access token expiry (e.g. `15m`)                  |
 | `JWT_REFRESH_SECRET`      | Secret used to sign/verify refresh tokens         |
 | `JWT_REFRESH_EXPIRES_IN`  | Refresh token expiry (e.g. `7d`)                  |
+| `AI_SERVICE_URL`          | Full URL of the external AI triage endpoint (e.g. `http://localhost:8000/triage`). Optional — defaults to `http://localhost:8000/triage` if unset. |
 
-The AI triage integration (see below) additionally expects a separate service reachable at `http://localhost:8000/triage` — this is not configured via env var and is currently hardcoded in `triage.service.js`.
+No `server/.env.example` currently exists in the repo — use the table above as the template.
 
 ## Architecture Overview
 
@@ -149,37 +157,43 @@ Errors thrown as `AppError(statusCode, message)` are caught by `globalErrorHandl
 
 Base URL: **`/api/v1`**
 
-`GET /api/v1/` → health check, returns `{ success: true, message: "CORTEX_MED API v1" }`.
+`GET /api/v1/` → health check, returns `{ success: true, message: "Qura API v1" }`.
 
 ### Auth (`/api/v1/auth`)
 
-| Method | Path        | Auth        | Body                                                                 | Description |
-|--------|-------------|-------------|-----------------------------------------------------------------------|-------------|
-| POST   | `/register` | Public      | `name` (string, min 3), `email` (email), `password` (string, min 6), `role` (`admin`\|`doctor`\|`receptionist`) | Creates a user. **`admin` role is rejected at the service layer** (`403`) even though the schema allows it — admins cannot self-register. If `role` is `doctor`, a matching `Doctor` profile is auto-created. Returns the created user (password omitted). |
-| POST   | `/login`    | Public      | `email`, `password`                                                    | Verifies credentials, updates `lastLogin`, returns `{ accessToken, refreshToken, user }`. If the user is a doctor, `user.doctorId` is included. |
-| POST   | `/refresh`  | Public      | `refreshToken` (string)                                                | Verifies the refresh token and issues a new `accessToken`. |
-| GET    | `/me`       | Any authenticated user | —                                                          | Returns the current user profile (includes `doctorId` for doctors). |
+| Method | Path                      | Auth        | Body                                                                 | Description |
+|--------|---------------------------|-------------|-----------------------------------------------------------------------|-------------|
+| POST   | `/register`               | Public      | `name` (string, min 3), `email` (email), `password` (string, min 6), `role` (`admin`\|`doctor`\|`receptionist`) | Creates a user. **`admin` role is rejected at the service layer** (`403`) even though the schema allows it — admins cannot self-register. If `role` is `doctor`, a matching `Doctor` profile is auto-created. Returns the created user (password omitted). |
+| POST   | `/login`                  | Public      | `email`, `password`                                                    | Verifies credentials, updates `lastLogin`, returns `{ accessToken, refreshToken, user }`. If the user is a doctor, `user.doctorId` is included. |
+| POST   | `/refresh`                | Public      | `refreshToken` (string)                                                | Verifies the refresh token and issues a new `accessToken`. |
+| PATCH  | `/change-password`        | Any authenticated user | current password, new password | Updates the caller's own password. |
+| PATCH  | `/notification-preferences` | Any authenticated user | `{ criticalAlerts, dailySummary, aiSuggestions }` (booleans) | Updates the caller's notification preference flags on their `User` document; returns the updated preferences. |
+| POST   | `/deactivate`             | Any authenticated user | —                                                                    | Deactivates the caller's own account (`isActive: false`). |
+| GET    | `/me`                     | Any authenticated user | —                                                          | Returns the current user profile (includes `doctorId` for doctors). |
 
 ### Doctors (`/api/v1/doctors`)
 
 | Method | Path | Auth | Body | Description |
 |--------|------|------|------|-------------|
-| GET  | `/` | `admin`, `receptionist`, `doctor` | — | Lists all doctor profiles (populated with `user.name/email/role/isActive`). Auto-backfills a `Doctor` profile for any active user with role `doctor` that doesn't have one yet. |
-| POST | `/` | `admin` | `user` (either an existing User `_id` string, **or** an inline object `{ name, email, password }` to create a new doctor user), `department`, `specialty`, `room`, `consultationFee` (number), `avgConsultationTime` (number), `workingDays` (string[]), `startTime`, `endTime` | Creates a doctor profile. If `user` is an object, a new `User` with role `doctor` is created first. Fails with `409` if the doctor profile or email already exists, `400` if an existing user isn't role `doctor`. |
+| GET    | `/` | `admin`, `receptionist`, `doctor` | — | Lists all doctor profiles (populated with `user.name/email/role/isActive`). Auto-backfills a `Doctor` profile for any active user with role `doctor` that doesn't have one yet. |
+| POST   | `/` | `admin` | `user` (either an existing User `_id` string, **or** an inline object `{ name, email, password }` to create a new doctor user), `department`, `specialty`, `room`, `consultationFee` (number), `avgConsultationTime` (number), `workingDays` (string[]), `startTime`, `endTime` | Creates a doctor profile. If `user` is an object, a new `User` with role `doctor` is created first. Fails with `409` if the doctor profile or email already exists, `400` if an existing user isn't role `doctor`. |
+| PATCH  | `/:id` | `admin` | Any subset of the doctor profile fields above | Updates a doctor profile. |
+| DELETE | `/:id` | `admin` | — | Deletes a doctor profile. |
 
 ### Appointments (`/api/v1/appointments`)
 
 | Method | Path | Auth | Body / Params | Description |
 |--------|------|------|----------------|-------------|
-| GET  | `/` | `admin`, `receptionist` | — | Lists all appointments, newest first, with doctor + user populated. |
+| GET  | `/` | `admin`, `receptionist`, `doctor` | — | Lists all appointments, newest first, with doctor + user populated. |
 | GET  | `/track/:code` | Public | `code` (appointment code, e.g. `CORTEX_MED-1234`) | Looks up an appointment by its public tracking code. Returns `{ appointment, peopleAhead }`, where `peopleAhead` counts waiting patients ahead in priority/token order. |
-| POST | `/` | `admin`, `receptionist`, `doctor` | `patientName`, `age` (number), `gender` (`male`\|`female`\|`other`), `phone`, `doctor` (Doctor `_id`), `symptoms` | Books an appointment. If the caller's role is `doctor`, the `doctor` field is forced to their own doctor profile (ignoring the submitted value). Auto-generates `appointmentCode` (`CORTEX_MED-####`) and a sequential `tokenNumber` per doctor, then immediately runs AI triage (see below), recalculates the doctor's queue wait times, and emits `queue:updated` + `wait:updated` socket events. |
+| POST | `/` | `admin`, `receptionist`, `doctor` | `patientName`, `age` (number), `gender` (`male`\|`female`\|`other`), `phone`, `doctor` (Doctor `_id`), `symptoms` | Books an appointment. If the caller's role is `doctor`, the `doctor` field is forced to their own doctor profile (ignoring the submitted value). Auto-generates `appointmentCode` (`CORTEX_MED-####`) and a sequential `tokenNumber` per doctor, then immediately runs AI triage (see below), recalculates the doctor's queue wait times, and emits `patient:booked` + `queue:updated` + `wait:updated` socket events. |
 
 ### Triage (`/api/v1/triage`)
 
-| Method | Path | Auth | Body | Description |
-|--------|------|------|------|-------------|
-| POST | `/` | `admin`, `receptionist` | `appointmentId` (string) | Re-runs AI triage for an existing appointment: sends its `symptoms` to the external triage service and updates `priority`, `triageReason`, `triageConfidence` on the appointment. |
+| Method | Path             | Auth                   | Body                     | Description |
+|--------|------------------|------------------------|--------------------------|-------------|
+| POST   | `/`              | `admin`, `receptionist` | `appointmentId` (string) | Re-runs AI triage for an existing appointment: sends its `symptoms` to the external triage service and updates `priority`, `triageReason`, `triageConfidence`, `triageFactors`, `riskLevel`, `recommendedDepartment`, `aiSummary` on the appointment. |
+| GET    | `/engine-status` | `admin`                 | —                        | Proxies the AI service's `/health` endpoint so the admin dashboard can show whether the AI triage engine is online and which LLM backend/model it's using, without triggering an inference call. Returns `{ online: false, status: "unreachable", llm_backend: null, llm_model: null }` if the AI service can't be reached. |
 
 ### Queue (`/api/v1/queue`)
 
@@ -189,19 +203,28 @@ Base URL: **`/api/v1`**
 | PATCH | `/call-next/:doctorId` | `doctor`, `receptionist` | `doctorId` | Moves the next highest-priority waiting patient to `serving`, sets `calledAt`, recalculates queue wait times, and emits `patient:called` + `queue:updated` + `wait:updated`. |
 | PATCH | `/complete/:appointmentId` | `doctor`, `receptionist` | `appointmentId` | Marks an appointment `completed`, sets `completedAt`, recalculates the doctor's queue, and emits `patient:completed` + `queue:updated` + `wait:updated`. |
 
+### Hospital Settings (`/api/v1/hospital-settings`)
+
+| Method | Path | Auth | Body | Description |
+|--------|------|------|------|-------------|
+| GET   | `/` | `admin`, `receptionist`, `doctor` | — | Fetches the (singleton) hospital settings document. |
+| PATCH | `/` | `admin` | `{ hospitalName?, facilityId? }` | Updates the hospital's display name and/or facility ID. |
+
 ## Data Models
 
 **User** (`auth.model.js`)
-`name`, `email` (unique), `password` (hashed, never selected by default), `role` (`admin`\|`doctor`\|`receptionist`), `isActive` (default `true`), `lastLogin`, timestamps.
+`name`, `email` (unique), `password` (hashed, never selected by default), `role` (`admin`\|`doctor`\|`receptionist`), `isActive` (default `true`), `notificationPreferences` (`{ criticalAlerts, dailySummary, aiSuggestions }`, each boolean, default `true`), `lastLogin`, timestamps.
 
 **Doctor** (`doctor.model.js`)
 `user` (ref `User`, unique), `department`, `specialty`, `room`, `consultationFee`, `avgConsultationTime` (default `15`), `workingDays[]`, `startTime`/`endTime`, `status` (`available`\|`unavailable`\|`on_leave`, default `available`), timestamps.
 
 **Appointment** (`appointment.model.js`)
-`patientName`, `age`, `gender`, `phone`, `doctor` (ref `Doctor`), `symptoms`, `appointmentCode` (unique), `tokenNumber`, `priority` (1–5, default `5`), `triageReason`, `triageConfidence` (0–1), `aiModel`, `triagedAt`, `estimatedWait` (default `0`), `status` (`waiting`\|`serving`\|`completed`\|`cancelled`, default `waiting`), `calledAt`, `completedAt`, `notes`, timestamps.
+`patientName`, `age`, `gender`, `phone`, `doctor` (ref `Doctor`), `symptoms`, `appointmentCode` (unique), `tokenNumber`, `priority` (1–5, default `5`), `triageReason`, `triageConfidence` (0–1), `triageFactors` (string[], the AI explainability bullets), `riskLevel` (`Low`\|`Medium`\|`High`\|`Critical`), `recommendedDepartment`, `aiSummary`, `aiModel`, `triagedAt`, `estimatedWait` (default `0`), `status` (`waiting`\|`serving`\|`completed`\|`cancelled`, default `waiting`), `calledAt`, `completedAt`, `notes`, timestamps.
+
+**HospitalSettings** (`hospital.model.js`)
+Singleton document: `hospitalName` (default `"CortexMed Hospital"`), `facilityId` (default `""`), timestamps.
 
 ## Real-Time Events (Socket.IO)
-
 
 Socket.IO is initialized in `src/app/socket/socket.js` on top of the same HTTP server, with CORS restricted to `CLIENT_URL`. Events are broadcast globally (`io.emit`, not room-scoped) whenever the queue changes:
 
@@ -209,6 +232,7 @@ Socket.IO is initialized in `src/app/socket/socket.js` on top of the same HTTP s
 |---------------------|--------------------------|--------------|
 | `queue:updated`     | `{ doctorId }`           | An appointment is created, called, or completed |
 | `wait:updated`      | `{ doctorId }`           | Same as above — signals clients to refetch wait-time estimates |
+| `patient:booked`    | full appointment object  | `POST /appointments` |
 | `patient:called`    | full appointment object  | `PATCH /queue/call-next/:doctorId` |
 | `patient:completed` | full appointment object  | `PATCH /queue/complete/:appointmentId` |
 
@@ -216,22 +240,22 @@ Clients only need to connect to the Socket.IO server at the same host — no aut
 
 ## External AI Triage Service
 
-`triage.service.js` calls out to a separate microservice expected at:
+`triage.service.js` calls out to a separate microservice, configured via the `AI_SERVICE_URL` env var (defaults to `http://localhost:8000/triage` if unset):
 
 ```
-POST http://localhost:8000/triage
+POST <AI_SERVICE_URL>
 Body: { "symptoms": "<patient symptoms text>" }
 ```
 
-Expected response: `{ "priority": 1-5, "reason": "string", "confidence": 0-1 }`. The prompt template intended for that service's LLM lives in `triage.prompt.js`.
+Expected response: `{ priority: 1-5, reason, confidence, factors, risk, department, summary }` (see [ai-service/README.md](../ai-service/README.md) for the full contract). If the service is unreachable or errors (20s timeout), triage falls back to a neutral default: `priority: 3`, `reason: "AI unavailable. Default priority assigned."`, `confidence: 0`, `risk: "Medium"`, `department: "General Medicine"` — so appointment booking never blocks on the AI service being down.
 
-This URL is currently hardcoded (not an env var). If the service is unreachable or times out (4s timeout), triage falls back to a neutral default: `priority: 3`, `reason: "AI triage unavailable - assigned default priority."`, `confidence: null` — so appointment booking never blocks on the AI service being down.
+`GET /api/v1/triage/engine-status` derives the AI service's health-check URL from `AI_SERVICE_URL` (swapping `/triage` for `/health`) so the admin dashboard can surface AI availability without running an actual triage.
 
 ## Known Limitations
 
-- No test suite, seed script, `.env.example`, Postman collection, or OpenAPI/Swagger spec currently exists in the repo.
+- No test suite, seed script, `server/.env.example`, Postman collection, or OpenAPI/Swagger spec currently exists in the repo.
 - No `helmet`, rate-limiting, or compression middleware on the Express app.
 - `globalErrorHandler` treats all errors uniformly via `err.statusCode`/`err.message`; it doesn't specially format Zod validation errors, so a validation failure surfaces as a generic (likely `500`) response rather than a structured `400` with field-level messages.
-- The AI triage service base URL is hardcoded in `triage.service.js` rather than read from an env var.
 - `QueueService.estimateWait` exists but isn't wired to any route.
 - `mongoose.connect` has no retry/reconnect handling — a dropped DB connection requires a process restart.
+- The `dashboard` and `analytics` modules are empty scaffolding; there is no dedicated analytics endpoint yet — the client computes analytics itself from appointment/doctor data.
