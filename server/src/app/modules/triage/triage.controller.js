@@ -19,6 +19,19 @@ const runTriage = catchAsync(async (req, res) => {
 
 });
 
+const getEngineStatus = catchAsync(async (req, res) => {
+
+    const result = await TriageService.getEngineStatus();
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "AI engine status fetched successfully",
+        data: result
+    });
+
+});
+
 module.exports = {
-    runTriage
+    runTriage,
+    getEngineStatus,
 };

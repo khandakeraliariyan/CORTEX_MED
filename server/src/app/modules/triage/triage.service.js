@@ -51,6 +51,27 @@ const runTriage = async (appointmentId) => {
     return appointment;
 };
 
+const getEngineStatus = async () => {
+    const healthUrl = config.ai_service_url.replace(/\/triage\/?$/, "/health");
+
+    try {
+        const response = await axios.get(healthUrl, { timeout: 4000 });
+
+        return {
+            online: true,
+            ...response.data,
+        };
+    } catch {
+        return {
+            online: false,
+            status: "unreachable",
+            llm_backend: null,
+            llm_model: null,
+        };
+    }
+};
+
 module.exports = {
     runTriage,
+    getEngineStatus,
 };

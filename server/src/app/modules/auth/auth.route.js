@@ -7,7 +7,14 @@ const AuthController = require("./auth.controller");
 const validateRequest = require("../../middlewares/validateRequest");
 const auth = require("../../middlewares/auth");
 
-const { registerValidation, loginValidation, refreshValidation, changePasswordValidation } = require("./auth.validation");
+const {
+    registerValidation,
+    loginValidation,
+    refreshValidation,
+    changePasswordValidation,
+    notificationPreferencesValidation,
+    deactivateAccountValidation,
+} = require("./auth.validation");
 
 router.post("/register", validateRequest(registerValidation), AuthController.register);
 
@@ -16,6 +23,10 @@ router.post("/login", validateRequest(loginValidation), AuthController.login);
 router.post("/refresh", validateRequest(refreshValidation), AuthController.refresh);
 
 router.patch("/change-password", auth(), validateRequest(changePasswordValidation), AuthController.changePassword);
+
+router.patch("/notification-preferences", auth(), validateRequest(notificationPreferencesValidation), AuthController.updateNotificationPreferences);
+
+router.post("/deactivate", auth(), validateRequest(deactivateAccountValidation), AuthController.deactivateAccount);
 
 router.get("/me", auth(), AuthController.me);
 

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* next-themes toggles a `.dark` class on <html>; without this, Tailwind v4's
+   `dark:` variant defaults to `prefers-color-scheme` and ignores that class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

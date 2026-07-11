@@ -1,5 +1,11 @@
 export type UserRole = "admin" | "doctor" | "receptionist";
 
+export interface NotificationPreferences {
+  criticalAlerts: boolean;
+  dailySummary: boolean;
+  aiSuggestions: boolean;
+}
+
 export interface AuthUser {
   id: string;
   _id?: string;
@@ -8,6 +14,7 @@ export interface AuthUser {
   role: UserRole;
   avatarUrl?: string;
   doctorId?: string | null;
+  notificationPreferences?: NotificationPreferences;
 }
 
 export interface AuthTokens {
@@ -29,6 +36,10 @@ export type SelfRegisterableRole = "doctor" | "receptionist";
 export interface ChangePasswordPayload {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface DeactivateAccountPayload {
+  currentPassword: string;
 }
 
 export interface RegisterPayload {

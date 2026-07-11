@@ -47,6 +47,32 @@ const changePassword = catchAsync(async (req, res) => {
     });
 });
 
+const updateNotificationPreferences = catchAsync(async (req, res) => {
+    const result = await AuthService.updateNotificationPreferences(
+        req.user.id,
+        req.body
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Notification preferences updated successfully",
+        data: result,
+    });
+});
+
+const deactivateAccount = catchAsync(async (req, res) => {
+    await AuthService.deactivateAccount(
+        req.user.id,
+        req.body.currentPassword
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Account deactivated successfully",
+        data: null,
+    });
+});
+
 const me = catchAsync(async (req, res) => {
     const result = await AuthService.getMe(req.user.id);
 
@@ -62,5 +88,7 @@ module.exports = {
     login,
     refresh,
     changePassword,
+    updateNotificationPreferences,
+    deactivateAccount,
     me,
 };

@@ -1,10 +1,11 @@
 "use client";
 
-import { ReactNode, useState, type ChangeEvent, type FormEvent } from "react";
+import { ReactNode, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { isAxiosError } from "axios";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   AppLogo,
   Avatar,
@@ -24,9 +25,16 @@ import {
 } from "@/components/cortex/ui";
 import { login, register } from "@/services/auth-service";
 import { useChangePassword } from "@/features/authentication/hooks/use-change-password";
+import { useUpdateNotificationPreferences } from "@/features/authentication/hooks/use-notification-preferences";
+import { useDeactivateAccount } from "@/features/authentication/hooks/use-deactivate-account";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
-import type { SelfRegisterableRole } from "@/types/auth.types";
+import type { NotificationPreferences, SelfRegisterableRole } from "@/types/auth.types";
+import {
+  useHospitalSettings,
+  useUpdateHospitalSettings,
+} from "@/features/hospital/hooks/use-hospital-settings";
+import { useAiEngineStatus } from "@/features/triage/hooks/use-ai-engine-status";
 import {
   useCreateDoctor,
   useDeleteDoctor,
@@ -1156,7 +1164,6 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
                         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{deleteError}</p>
                       )}
                       <div className="mt-7 flex gap-4">
-                        <Button variant="secondary">Profile</Button>
                         {canManageDoctors && (
                           <>
                             <Button variant="secondary" onClick={() => setEditingId(doctor._id)}>Edit</Button>
@@ -2001,6 +2008,219 @@ export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string
   );
 }
 
+function HospitalInformationPanel({ canEdit }: { canEdit: boolean }) {
+  const { data: settings, isLoading } = useHospitalSettings();
+  const updateSettings = useUpdateHospitalSettings();
+  const [form, setForm] = useState({ hospitalName: "", facilityId: "" });
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setForm({ hospitalName: settings.hospitalName, facilityId: settings.facilityId });
+    }
+  }, [settings]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaved(false);
+    await updateSettings.mutateAsync(form);
+    setSaved(true);
+  };
+
+  return (
+    <Panel title="Hospital Information">
+      {isLoading ? (
+        <EmptyState label="Loading hospital settings..." />
+      ) : (
+        <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
+          <label className="block">
+            <span className="font-bold">Hospital Name</span>
+            <input
+              disabled={!canEdit}
+              required
+              value={form.hospitalName}
+              onChange={(e) => setForm((p) => ({ ...p, hospitalName: e.target.value }))}
+              className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] px-4 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          <label className="block">
+            <span className="font-bold">Facility ID</span>
+            <input
+              disabled={!canEdit}
+              value={form.facilityId}
+              onChange={(e) => setForm((p) => ({ ...p, facilityId: e.target.value }))}
+              className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] px-4 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          {canEdit && (
+            <div className="md:col-span-2 flex items-center justify-end gap-4">
+              {saved && <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Saved.</span>}
+              <Button type="submit" disabled={updateSettings.isPending} className="disabled:opacity-60">
+                {updateSettings.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          )}
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+function ThemeAppearancePanel() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const modes: Array<{ key: string; label: string }> = [
+    { key: "light", label: "Light Mode" },
+    { key: "dark", label: "Dark Mode" },
+    { key: "system", label: "Auto System" },
+  ];
+
+  return (
+    <Panel title="Theme & Appearance">
+      <div className="grid gap-4 md:grid-cols-3">
+        {modes.map((mode) => {
+          const active = mounted && theme === mode.key;
+          return (
+            <button
+              key={mode.key}
+              type="button"
+              onClick={() => setTheme(mode.key)}
+              className={`rounded-lg border p-4 text-left ${active ? "border-[#0755d9] ring-2 ring-[#0755d9]/30" : "border-[#c4c9dc] dark:border-slate-700"}`}
+            >
+              <div className="h-20 rounded bg-[#f0f1fb] dark:bg-slate-800" />
+              <b className="mt-3 block">{mode.label}</b>
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+const NOTIFICATION_ITEMS: Array<{ key: keyof NotificationPreferences; label: string }> = [
+  { key: "criticalAlerts", label: "Critical Patient Alerts" },
+  { key: "dailySummary", label: "Daily Summary Reports" },
+  { key: "aiSuggestions", label: "AI Diagnostic Suggestions" },
+];
+
+function NotificationsPanel() {
+  const user = useAuthStore((state) => state.user);
+  const updatePreferences = useUpdateNotificationPreferences();
+  const preferences: NotificationPreferences = user?.notificationPreferences ?? {
+    criticalAlerts: true,
+    dailySummary: true,
+    aiSuggestions: true,
+  };
+
+  const toggle = (key: keyof NotificationPreferences) => {
+    updatePreferences.mutate({ ...preferences, [key]: !preferences[key] });
+  };
+
+  return (
+    <Panel title="Notifications">
+      <div className="space-y-5">
+        {NOTIFICATION_ITEMS.map((item) => (
+          <div key={item.key} className="flex items-center justify-between border-b border-[#d7dbea] pb-4 dark:border-slate-700">
+            <span>{item.label}</span>
+            <button
+              type="button"
+              aria-pressed={preferences[item.key]}
+              onClick={() => toggle(item.key)}
+              disabled={updatePreferences.isPending}
+              className={`h-6 w-11 rounded-full transition disabled:opacity-60 ${preferences[item.key] ? "bg-[#0755d9]" : "bg-slate-300 dark:bg-slate-600"}`}
+            >
+              <span className={`block h-5 w-5 rounded-full bg-white shadow transition ${preferences[item.key] ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function AiEngineStatusPanel() {
+  const { data: status, isLoading } = useAiEngineStatus();
+
+  return (
+    <Panel title="AI Engine Status" subtitle="Cortex AI Triage Engine (CATE) connectivity">
+      {isLoading ? (
+        <EmptyState label="Checking AI engine..." />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</span>
+            <div className="mt-2">
+              <StatusPill tone={status?.online ? "green" : "red"}>{status?.online ? "Online" : "Offline"}</StatusPill>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Backend</span>
+            <p className="mt-2 font-bold">{status?.llm_backend ?? "--"}</p>
+          </div>
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Model</span>
+            <p className="mt-2 font-bold">{status?.llm_model ?? "--"}</p>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function DangerZonePanel() {
+  const deactivate = useDeactivateAccount();
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await deactivate.mutateAsync({ currentPassword: password });
+      clearSession();
+      router.replace(ROUTES.LOGIN);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <Panel className="border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black text-red-700 dark:text-red-400">Danger Zone</h2>
+          <p>Deactivate your account. You will be logged out immediately and an administrator will need to reactivate it.</p>
+        </div>
+        <Button variant="danger" onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Deactivate My Account"}</Button>
+      </div>
+      {open && (
+        <form onSubmit={handleSubmit} className="mt-5 flex flex-wrap items-end gap-4">
+          <label className="block">
+            <span className="font-bold">Confirm Password</span>
+            <input
+              required
+              type="password"
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-2 h-12 rounded-lg border border-[#c4c9dc] px-4 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          <Button type="submit" variant="danger" disabled={deactivate.isPending} className="disabled:opacity-60">
+            {deactivate.isPending ? "Deactivating..." : "Confirm Deactivation"}
+          </Button>
+        </form>
+      )}
+      {error && <p className="mt-4 rounded-lg bg-red-100 px-4 py-3 text-sm font-bold text-red-800">{error}</p>}
+    </Panel>
+  );
+}
+
 function SecurityPrivacyPanel() {
   const changePassword = useChangePassword();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -2038,24 +2258,31 @@ function SecurityPrivacyPanel() {
   );
 }
 
-export function SettingsPage() {
+export function SettingsPage({ role = "admin" }: { role?: "admin" | "receptionist" } = {}) {
   const user = useAuthStore((state) => state.user);
+  const canManageHospital = role === "admin";
 
   return (
-    <DashboardShell role="admin" active="Settings" searchPlaceholder="Search settings...">
+    <DashboardShell role={role} active="Settings" searchPlaceholder="Search settings...">
       <PageTitle title="Settings" subtitle="Manage hospital configurations, user profile, and system preferences." />
       <div className="grid gap-8 xl:grid-cols-[180px_1fr]">
-        <nav className="space-y-4 text-sm"><b>Profile Details</b><p>Hospital Information</p><p>Theme & Appearance</p><p>Notifications</p><p>AI Intelligence</p><p className="font-bold text-[#0755d9]">Security & Privacy</p><p>Danger Zone</p></nav>
+        <nav className="space-y-4 text-sm">
+          <b>Profile</b>
+          <p>Hospital Information</p>
+          <p>Theme & Appearance</p>
+          <p>Notifications</p>
+          {canManageHospital && <p>AI Engine</p>}
+          <p className="font-bold text-[#0755d9]">Security & Privacy</p>
+          <p>Danger Zone</p>
+        </nav>
         <div className="space-y-7">
           <Panel><div className="flex items-center gap-5"><Avatar name={user?.name} className="h-24 w-24" /><div><h2 className="text-2xl font-black">{user?.name ?? "Your Profile"}</h2><StatusPill>Verified</StatusPill></div></div></Panel>
-          <Panel title="Profile Details"><div className="grid gap-5 md:grid-cols-2"><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" defaultValue={user?.name ?? ""} placeholder="Full Name" /><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" defaultValue={user?.email ?? ""} placeholder="Email Address" /></div></Panel>
-          <Panel title="Hospital Information"><div className="grid gap-5 md:grid-cols-2"><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Hospital Name" /><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Facility ID" /></div></Panel>
-          <Panel title="Theme & Appearance"><div className="grid gap-4 md:grid-cols-3">{["Light Mode", "Dark Mode", "Auto System"].map((mode) => <div key={mode} className="rounded-lg border border-[#c4c9dc] p-4"><div className="h-20 rounded bg-[#f0f1fb]" /><b className="mt-3 block">{mode}</b></div>)}</div></Panel>
-          <Panel title="Notifications"><div className="space-y-5">{["Critical Patient Alerts", "Daily Summary Reports", "AI Diagnostic Suggestions"].map((item) => <div key={item} className="flex justify-between border-b border-[#d7dbea] pb-4"><span>{item}</span><span className="h-6 w-11 rounded-full bg-slate-300" /></div>)}</div></Panel>
-          <Panel title="AI Intelligence Settings"><Progress value={0} /><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-lg border border-[#c4c9dc] p-4">Copilot Mode</div><div className="rounded-lg border border-[#c4c9dc] p-4">Audit Mode</div></div></Panel>
+          <HospitalInformationPanel canEdit={canManageHospital} />
+          <ThemeAppearancePanel />
+          <NotificationsPanel />
+          {canManageHospital && <AiEngineStatusPanel />}
           <SecurityPrivacyPanel />
-          <Panel className="border-red-200 bg-red-50"><div className="flex justify-between"><div><h2 className="text-xl font-black text-red-700">Danger Zone</h2><p>Deactivate hospital instance and archive clinical records.</p></div><Button variant="danger">Terminate System</Button></div></Panel>
-          <div className="flex justify-end gap-4"><Button variant="secondary">Discard Changes</Button><Button>Save Settings</Button></div>
+          <DangerZonePanel />
         </div>
       </div>
     </DashboardShell>
@@ -2063,6 +2290,8 @@ export function SettingsPage() {
 }
 
 export function NotFoundPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-[#fbfaff] text-slate-950">
       <header className="border-b border-[#c4c9dc]">
@@ -2074,7 +2303,7 @@ export function NotFoundPage() {
           <h1 className="mt-16 text-6xl font-black text-[#0755d9]">404</h1>
           <h2 className="mx-auto mt-6 max-w-[620px] text-4xl font-black">Looks like this patient record doesn&apos;t exist.</h2>
           <p className="mx-auto mt-6 max-w-[620px] text-xl leading-8 text-slate-600">The data you&apos;re looking for might have been archived, moved, or the ID provided is incorrect.</p>
-          <div className="mt-10 flex justify-center gap-5"><Link href="/"><Button>Back Home</Button></Link><Button variant="secondary">Previous Page</Button></div>
+          <div className="mt-10 flex justify-center gap-5"><Link href="/"><Button>Back Home</Button></Link><Button variant="secondary" onClick={() => router.back()}>Previous Page</Button></div>
         </div>
       </main>
       <Footer />
