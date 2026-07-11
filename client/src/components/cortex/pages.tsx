@@ -22,6 +22,7 @@ import {
   StatusPill,
 } from "@/components/cortex/ui";
 import { login, register } from "@/services/auth-service";
+import { useChangePassword } from "@/features/authentication/hooks/use-change-password";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
 import type { SelfRegisterableRole } from "@/types/auth.types";
@@ -327,7 +328,6 @@ export function LoginPage() {
               </label>
               <div className="flex justify-between text-slate-700">
                 <label className="flex items-center gap-3"><input type="checkbox" /> Remember device</label>
-                <Link href="/forgot-password" className="font-bold text-[#0755d9]">Forgot credentials?</Link>
               </div>
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
               <Button type="submit" disabled={loading} className="h-16 w-full text-xl disabled:opacity-60">
@@ -1748,6 +1748,43 @@ export function PatientQueueTrackingPage() {
   );
 }
 
+function SecurityPrivacyPanel() {
+  const changePassword = useChangePassword();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    try {
+      await changePassword.mutateAsync({ currentPassword, newPassword });
+      setSuccess("Password changed successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <Panel title="Security & Privacy">
+      <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+        <input required type="password" minLength={6} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Current password" />
+        <input required type="password" minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Enter new password" />
+        {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+        {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" disabled={changePassword.isPending} className="disabled:opacity-60">{changePassword.isPending ? "Updating..." : "Update Password"}</Button>
+        </div>
+      </form>
+      <div className="mt-5 rounded-lg bg-[#f0f1fb] p-4">Two-Factor Authentication <Button variant="secondary" className="float-right h-9">Enable 2FA</Button></div>
+    </Panel>
+  );
+}
+
 export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
 
@@ -1763,7 +1800,7 @@ export function SettingsPage() {
           <Panel title="Theme & Appearance"><div className="grid gap-4 md:grid-cols-3">{["Light Mode", "Dark Mode", "Auto System"].map((mode) => <div key={mode} className="rounded-lg border border-[#c4c9dc] p-4"><div className="h-20 rounded bg-[#f0f1fb]" /><b className="mt-3 block">{mode}</b></div>)}</div></Panel>
           <Panel title="Notifications"><div className="space-y-5">{["Critical Patient Alerts", "Daily Summary Reports", "AI Diagnostic Suggestions"].map((item) => <div key={item} className="flex justify-between border-b border-[#d7dbea] pb-4"><span>{item}</span><span className="h-6 w-11 rounded-full bg-slate-300" /></div>)}</div></Panel>
           <Panel title="AI Intelligence Settings"><Progress value={0} /><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-lg border border-[#c4c9dc] p-4">Copilot Mode</div><div className="rounded-lg border border-[#c4c9dc] p-4">Audit Mode</div></div></Panel>
-          <Panel title="Security & Privacy"><div className="grid gap-4 md:grid-cols-2"><input type="password" className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Current password" /><input type="password" className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Enter new password" /></div><div className="mt-5 rounded-lg bg-[#f0f1fb] p-4">Two-Factor Authentication <Button variant="secondary" className="float-right h-9">Enable 2FA</Button></div></Panel>
+          <SecurityPrivacyPanel />
           <Panel className="border-red-200 bg-red-50"><div className="flex justify-between"><div><h2 className="text-xl font-black text-red-700">Danger Zone</h2><p>Deactivate hospital instance and archive clinical records.</p></div><Button variant="danger">Terminate System</Button></div></Panel>
           <div className="flex justify-end gap-4"><Button variant="secondary">Discard Changes</Button><Button>Save Settings</Button></div>
         </div>

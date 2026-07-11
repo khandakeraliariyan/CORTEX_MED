@@ -26,6 +26,11 @@ export interface LoginResponse extends AuthTokens {
 
 export type SelfRegisterableRole = "doctor" | "receptionist";
 
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface RegisterPayload {
   name: string;
   email: string;

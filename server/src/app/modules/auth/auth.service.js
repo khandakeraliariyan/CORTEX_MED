@@ -143,6 +143,27 @@ const refreshAccessToken = async (refreshToken) => {
     return { accessToken };
 };
 
+const changePassword = async (userId, currentPassword, newPassword) => {
+    const user = await User.findById(userId).select("+password");
+
+    if (!user) {
+        throw new AppError(404, "User not found");
+    }
+
+    const matched = await comparePassword(
+        currentPassword,
+        user.password
+    );
+
+    if (!matched) {
+        throw new AppError(401, "Current password is incorrect");
+    }
+
+    user.password = await hashPassword(newPassword);
+
+    await user.save();
+};
+
 const getMe = async (userId) => {
     const user = await User.findById(userId);
 
@@ -166,5 +187,6 @@ module.exports = {
     registerUser,
     loginUser,
     refreshAccessToken,
+    changePassword,
     getMe,
 };

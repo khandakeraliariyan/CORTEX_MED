@@ -33,6 +33,20 @@ const refresh = catchAsync(async (req, res) => {
     });
 });
 
+const changePassword = catchAsync(async (req, res) => {
+    await AuthService.changePassword(
+        req.user.id,
+        req.body.currentPassword,
+        req.body.newPassword
+    );
+
+    sendResponse(res, {
+        statusCode: 200,
+        message: "Password changed successfully",
+        data: null,
+    });
+});
+
 const me = catchAsync(async (req, res) => {
     const result = await AuthService.getMe(req.user.id);
 
@@ -47,5 +61,6 @@ module.exports = {
     register,
     login,
     refresh,
+    changePassword,
     me,
 };

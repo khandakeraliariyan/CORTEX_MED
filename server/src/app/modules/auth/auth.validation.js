@@ -35,8 +35,17 @@ const refreshValidation = z.object({
     }),
 });
 
+const changePasswordValidation = z.object({
+    body: z.object({
+        currentPassword: z.string().min(6),
+
+        newPassword: z.string().min(6),
+    }),
+});
+
 module.exports = {
     registerValidation,
     loginValidation,
     refreshValidation,
+    changePasswordValidation,
 };
