@@ -69,6 +69,11 @@ const appointmentSchema = new mongoose.Schema(
             default: null,
         },
 
+        triageFactors: {
+            type: [String],
+            default: [],
+        },
+
         aiModel: {
             type: String,
             default: null,

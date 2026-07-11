@@ -11,4 +11,6 @@ module.exports = {
 
     jwt_refresh_secret: process.env.JWT_REFRESH_SECRET,
     jwt_refresh_expire: process.env.JWT_REFRESH_EXPIRES_IN,
+
+    ai_service_url: process.env.AI_SERVICE_URL || "http://localhost:8000/triage",
 };

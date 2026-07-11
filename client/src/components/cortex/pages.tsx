@@ -74,6 +74,46 @@ function priorityTone(priority: number): "red" | "orange" | "blue" | "slate" {
   return "slate";
 }
 
+const PRIORITY_LABELS: Record<number, string> = {
+  1: "Critical",
+  2: "Urgent",
+  3: "Moderate",
+  4: "Mild",
+  5: "Non-Urgent",
+};
+
+function priorityLabel(priority: number): string {
+  return PRIORITY_LABELS[priority] ?? "Unknown";
+}
+
+function AiExplainability({ appointment }: { appointment: Appointment }) {
+  const confidencePct =
+    appointment.triageConfidence != null ? Math.round(appointment.triageConfidence * 100) : null;
+  const confidenceTone = confidencePct === null ? "slate" : confidencePct >= 70 ? "green" : confidencePct >= 40 ? "orange" : "red";
+
+  return (
+    <div className="rounded-xl bg-[#f0f1fb] p-5">
+      <div className="flex items-center justify-between gap-3">
+        <b className="text-[#0755d9]">AI REASONING</b>
+        {confidencePct !== null && (
+          <StatusPill tone={confidenceTone}>{confidencePct}% confidence</StatusPill>
+        )}
+      </div>
+      <p className="mt-3 font-bold">
+        Priority P{appointment.priority} ({priorityLabel(appointment.priority)})
+      </p>
+      {appointment.triageFactors.length > 0 && (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+          {appointment.triageFactors.map((factor) => (
+            <li key={factor}>{factor}</li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-sm text-slate-700">{appointment.triageReason ?? "Not available"}</p>
+    </div>
+  );
+}
+
 function statusTone(status: Appointment["status"]): "blue" | "green" | "slate" | "red" {
   if (status === "waiting") return "blue";
   if (status === "serving") return "green";
@@ -1214,7 +1254,7 @@ export function ReceptionDashboardPage() {
 
   const [form, setForm] = useState({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
+  const [success, setSuccess] = useState<Appointment | null>(null);
 
   const resetForm = () => setForm({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
 
@@ -1231,7 +1271,7 @@ export function ReceptionDashboardPage() {
         doctor: form.doctor,
         symptoms: form.symptoms,
       });
-      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
+      setSuccess(appointment);
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1274,10 +1314,13 @@ export function ReceptionDashboardPage() {
             <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-32 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the patient's condition..." /></label>
             {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
             {success && (
-              <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-                Booked - token #{success.tokenNumber}, code {success.code}.{" "}
-                <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
-              </p>
+              <div className="md:col-span-2 space-y-3">
+                <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                  Booked - token #{success.tokenNumber}, code {success.appointmentCode}.{" "}
+                  <Link href={`/track/${success.appointmentCode}`} className="underline" target="_blank">Open patient tracking link</Link>
+                </p>
+                <AiExplainability appointment={success} />
+              </div>
             )}
             <div className="md:col-span-2 flex justify-end gap-4">
               <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
@@ -1633,11 +1676,11 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
               <div>
                 <div className="flex justify-between">
                   <div><h2 className="text-2xl font-black">{current.patientName}</h2><p>Token #{current.tokenNumber} - {current.age} yrs, {current.gender}</p></div>
-                  <div><b className="text-[#0755d9]">PRIORITY P{current.priority}</b></div>
+                  <div><b className="text-[#0755d9]">PRIORITY P{current.priority} ({priorityLabel(current.priority)})</b></div>
                 </div>
                 <div className="mt-6 grid gap-5 md:grid-cols-2">
                   <div className="rounded-xl bg-[#f0f1fb] p-5"><b className="text-[#0755d9]">PRESENTING SYMPTOMS</b><p className="mt-3">{current.symptoms}</p></div>
-                  <div className="rounded-xl bg-[#f0f1fb] p-5"><b className="text-[#0755d9]">AI REASONING</b><p className="mt-3">{current.triageReason ?? "Not available"}</p></div>
+                  <AiExplainability appointment={current} />
                 </div>
                 <div className="mt-7 flex flex-wrap gap-4">
                   <Button disabled={completePatient.isPending} onClick={() => completePatient.mutate(current._id)} className="disabled:opacity-60">{completePatient.isPending ? "Completing..." : "Complete Consultation"}</Button>
@@ -1702,7 +1745,7 @@ export function DoctorEmergencyIntakePage() {
     symptoms: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
+  const [success, setSuccess] = useState<Appointment | null>(null);
 
   const resetForm = () => {
     setForm({ patientName: "", age: "", gender: "male", phone: "", symptoms: "" });
@@ -1727,7 +1770,7 @@ export function DoctorEmergencyIntakePage() {
         doctor: user.doctorId,
         symptoms: form.symptoms,
       });
-      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
+      setSuccess(appointment);
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1746,10 +1789,13 @@ export function DoctorEmergencyIntakePage() {
           <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-36 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the emergency condition..." /></label>
           {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
           {success && (
-            <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-              Emergency intake booked - token #{success.tokenNumber}, code {success.code}.{" "}
-              <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
-            </p>
+            <div className="md:col-span-2 space-y-3">
+              <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                Emergency intake booked - token #{success.tokenNumber}, code {success.appointmentCode}.{" "}
+                <Link href={`/track/${success.appointmentCode}`} className="underline" target="_blank">Open patient tracking link</Link>
+              </p>
+              <AiExplainability appointment={success} />
+            </div>
           )}
           <div className="md:col-span-2 flex justify-end gap-4">
             <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>

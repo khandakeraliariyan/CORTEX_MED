@@ -3,6 +3,8 @@ const axios = require("axios");
 const Appointment = require("../appointment/appointment.model");
 const AppError = require("../../errors/AppError");
 
+const config = require("../../config");
+
 const runTriage = async (appointmentId) => {
     const appointment = await Appointment.findById(appointmentId);
 
@@ -14,11 +16,11 @@ const runTriage = async (appointmentId) => {
 
     try {
         const response = await axios.post(
-            "http://localhost:8000/triage",
+            config.ai_service_url,
             {
                 symptoms: appointment.symptoms,
             },
-            { timeout: 4000 }
+            { timeout: 20000 }
         );
 
         result = response.data;
@@ -27,14 +29,16 @@ const runTriage = async (appointmentId) => {
         // so booking never blocks on the external model being offline.
         result = {
             priority: 3,
-            reason: "AI triage unavailable - assigned default priority.",
-            confidence: null,
+            reason: "AI unavailable. Default priority assigned.",
+            confidence: 0,
+            factors: [],
         };
     }
 
     appointment.priority = result.priority;
     appointment.triageReason = result.reason;
     appointment.triageConfidence = result.confidence;
+    appointment.triageFactors = Array.isArray(result.factors) ? result.factors : [];
 
     await appointment.save();
 

@@ -15,6 +15,7 @@ export interface Appointment {
   priority: number;
   triageReason: string | null;
   triageConfidence: number | null;
+  triageFactors: string[];
   estimatedWait: number;
   status: AppointmentStatus;
   calledAt: string | null;
