@@ -69,10 +69,11 @@ client/
 │   │   ├── appointment/  (components/hooks/services/types)
 │   │   ├── doctor/       (components/hooks/services/types)
 │   │   ├── queue/        (components/hooks/services/types)
-│   │   ├── analytics/    (scaffolded, empty)
-│   │   ├── authentication/ (scaffolded, empty — auth lives in src/services + src/store instead)
-│   │   ├── patient/      (scaffolded, empty)
-│   │   └── triage/       (scaffolded, empty — triage data rides along on Appointment)
+│   │   ├── hospital/     (hooks/services/types — hospital name & facility ID settings)
+│   │   ├── triage/       (hooks/services/types — AI engine status; per-appointment triage fields still live on Appointment)
+│   │   ├── analytics/    (hooks only — useHospitalAnalytics computes metrics client-side from appointments/doctors)
+│   │   ├── authentication/ (hooks only — useChangePassword/useDeactivateAccount/useUpdateNotificationPreferences; core login/session logic lives in src/services + src/store instead)
+│   │   └── patient/      (scaffolded, empty — no logged-in patient dashboard yet)
 │   ├── hooks/
 │   │   └── use-role-guard.ts           # Redirects to the user's own dashboard if role mismatches
 │   ├── providers/
@@ -171,14 +172,20 @@ All server communication goes through TanStack React Query, configured in `query
 
 ## Real-Time (Socket.IO)
 
-`SocketProvider` opens a connection (`autoConnect: false`, `transports: ["websocket"]`) whenever an access token is present in the auth store, passing it as `auth: { token }` on the handshake, and tears it down on token change/unmount. It exposes `{ socket, isConnected }` via `useSocket()`.
+`SocketProvider` opens a connection whenever an access token is present in the auth store, passing it as `auth: { token }` on the handshake, and tears it down on token change/unmount. It exposes `{ socket, isConnected }` via `useSocket()`.
 
-As of this writing, no component actually subscribes to the server's `queue:updated` / `wait:updated` / `patient:called` / `patient:completed` events (see the [server README](../server/README.md#real-time-events-socketio) for the full event list) — the connection is established but real-time UI updates are not yet wired up; screens rely on React Query polling instead.
+`SocketProvider` subscribes to all of the server's events (see the [server README](../server/README.md#real-time-events-socketio) for the full list) and reacts to each:
+
+- `queue:updated` / `wait:updated` — invalidates the `["appointments"]` query and any `["queue", ...]` / `["appointment-track", ...]` queries, so affected screens refetch immediately instead of waiting for their next poll.
+- `patient:booked` / `patient:called` / `patient:completed` — does the same cache invalidation **and** pushes a toast-style entry into `useNotificationsStore` (e.g. "New patient checked in: Jane Doe (Token #12)"), which backs the notification bell shown in `DashboardShell`.
+
+React Query polling (`useQueue` every 10s, `useTrackAppointment` every 15s) still runs as a safety net, but in practice screens now update the moment a socket event arrives rather than waiting on the poll interval.
 
 ## State Management
 
-- **`useAuthStore`** (Zustand + `persist`) — the only global client store. Holds `user`, `accessToken`, `isAuthenticated`, and the actions `setSession`, `setUser`, `hydrateAccessToken`, `clearSession`. Persisted slice: `{ user, isAuthenticated }` only.
-- Everything else is local component state (`useState` for forms, filters, selected doctor, etc.) or server state via React Query. There is no other global store (no separate UI/theme store — theme is handled by `next-themes`).
+- **`useAuthStore`** (Zustand + `persist`) — holds `user`, `accessToken`, `isAuthenticated`, and the actions `setSession`, `setUser`, `hydrateAccessToken`, `clearSession`. Persisted slice: `{ user, isAuthenticated }` only.
+- **`useNotificationsStore`** (Zustand, not persisted) — an in-memory feed of the last 20 real-time events (`{ id, message, createdAt, read }`), populated by `SocketProvider` and cleared/marked-read from the UI. Backs the notification bell in `DashboardShell`.
+- Everything else is local component state (`useState` for forms, filters, selected doctor, etc.) or server state via React Query. There is no separate UI/theme store — theme is handled by `next-themes`.
 
 ## UI Layer
 
@@ -193,17 +200,18 @@ As of this writing, no component actually subscribes to the server's `queue:upda
 | `appointment` | Implemented | `listAppointments`, `createAppointment`, `trackAppointment` + `useAppointments`, `useCreateAppointment`, `useTrackAppointment`. Booking auto-triggers server-side AI triage and queue recalculation. |
 | `doctor` | Implemented | `listDoctors`, `createDoctor` + `useDoctors`, `useCreateDoctor`. `createDoctor` can create a brand-new doctor `User` inline (name/email/password) as part of the same call. |
 | `queue` | Implemented | `getQueue`, `callNextPatient`, `completePatient` + `useQueue`, `useCallNextPatient`, `useCompletePatient`. Backs both the receptionist "Live Queue" and doctor "My Queue" screens. |
-| `analytics` | Scaffolded only | No service/hook/types yet. The current `AnalyticsPage` derives its numbers client-side from `useDoctors`/`useAppointments` (e.g. priority distribution) rather than calling a dedicated analytics endpoint; several metrics (avg wait, bed occupancy, ER efficiency) are static placeholders (`--`). |
-| `authentication` | Scaffolded only | Actual auth logic lives in `src/services/auth-service.ts` + `src/store/auth-store.ts` + `src/providers/auth-provider.tsx` rather than under `features/authentication`. |
+| `hospital` | Implemented | `getHospitalSettings`, `updateHospitalSettings` + `useHospitalSettings`. Backs the admin "Hospital Settings" panel (hospital name, facility ID). |
+| `triage` | Implemented | `getAiEngineStatus` + `useAiEngineStatus` (polls every 30s). Surfaces whether the AI triage engine is online and which LLM backend/model it's using — shown on the admin dashboard/settings so staff know if triage is running live or falling back to the neutral default. Per-appointment triage fields (`priority`, `triageReason`, `triageConfidence`, `triageFactors`, `riskLevel`, `recommendedDepartment`, `aiSummary`) still ride along on the `Appointment` type from the `appointment` feature. |
+| `authentication` | Implemented (hooks only) | `useChangePassword`, `useDeactivateAccount`, `useUpdateNotificationPreferences` live here; core login/register/session logic still lives in `src/services/auth-service.ts` + `src/store/auth-store.ts` + `src/providers/auth-provider.tsx` rather than under `features/authentication`. |
+| `analytics` | Implemented (client-computed) | `useHospitalAnalytics(appointments, doctors)` derives average wait, doctor availability %, ER efficiency %, priority breakdown, hourly volume, a weekly heatmap, and per-doctor performance — all computed in the browser from `appointments`/`doctors` data rather than from a dedicated analytics endpoint (the server's `analytics` module is still an empty scaffold). |
 | `patient` | Scaffolded only | The `(protected)/patient` route group has a role-guarding `layout.tsx` but no `page.tsx` routes yet; the "patient" experience that exists (`PatientQueueTrackingPage`) is reached via the public `/track/[queueId]` route, not `/patient/*`. |
-| `triage` | Scaffolded only | Triage fields (`priority`, `triageReason`, `triageConfidence`) ride along on the `Appointment` type from the `appointment` feature; there's no standalone triage service/hook on the client. |
 
 ## Known Limitations
 
 - No test suite, Storybook, or `.env.example` in the repo.
 - Route protection is entirely client-side — there's no `middleware.ts`, so a protected page's HTML/JS still ships to an unauthenticated request before the redirect fires client-side (a brief blank screen, not a security boundary).
 - `components/cortex/pages.tsx` (1000+ lines) and `ui.tsx` (~440 lines) hold effectively the entire UI in two files; the `features/*/components` and `components/{layout,shared,ui}` directories exist to receive a future decomposition but are currently empty.
-- Socket.IO connects but nothing subscribes to its events yet — queue/appointment screens rely solely on React Query polling (10s/15s intervals) for freshness, not push updates.
 - Logout is local-only (clears `localStorage` + Zustand state); there's no server call to revoke the refresh token.
 - `/forgot-password` and password-reset (`ROUTES.RESET_PASSWORD`) are referenced in `routes.ts` and linked from the login page, but the route folder is an empty scaffold — no page implementation exists yet.
 - `/track/[queueId]`'s dynamic segment isn't read by `PatientQueueTrackingPage` — tracking works via a code entered in a form on that page, not the URL param.
+- The `(protected)/patient` route group has no page routes yet — there is no logged-in "patient" dashboard experience, only the public tracking page.
