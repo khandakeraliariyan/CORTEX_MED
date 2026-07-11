@@ -26,17 +26,10 @@ export const ROUTES = {
     STAFF: "/admin/staff",
     SETTINGS: "/admin/settings",
   },
-  PATIENT: {
-    DASHBOARD: "/patient/dashboard",
-    QUEUE: "/patient/queue",
-    APPOINTMENTS: "/patient/appointments",
-    PROFILE: "/patient/profile",
-  },
 } as const;
 
 export const ROLE_DASHBOARD_PATH: Record<UserRole, string> = {
   admin: ROUTES.ADMIN.DASHBOARD,
   doctor: ROUTES.DOCTOR.DASHBOARD,
   receptionist: ROUTES.RECEPTION.DASHBOARD,
-  patient: ROUTES.PATIENT.DASHBOARD,
 };

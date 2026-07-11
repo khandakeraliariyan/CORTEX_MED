@@ -37,13 +37,6 @@ const receptionNav: NavItem[] = [
   { label: "Settings", href: "#", icon: "⚙" },
 ];
 
-const patientNav: NavItem[] = [
-  { label: "Dashboard", href: "/patient/dashboard", icon: "[]" },
-  { label: "Queue", href: "/patient/queue", icon: "::" },
-  { label: "Appointments", href: "/patient/appointments", icon: "##" },
-  { label: "Profile", href: "/patient/profile", icon: "@" },
-];
-
 export function AppLogo({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-3">
@@ -82,11 +75,10 @@ export function Avatar({ name, className = "" }: { name?: string; className?: st
   );
 }
 
-export type DashboardRole = "admin" | "doctor" | "receptionist" | "patient";
+export type DashboardRole = "admin" | "doctor" | "receptionist";
 
 function sidebarNavFor(role: DashboardRole) {
   if (role === "doctor") return doctorNav;
-  if (role === "patient") return patientNav;
   if (role === "receptionist") return receptionNav;
   return adminNav;
 }
@@ -95,7 +87,6 @@ const roleLabel: Record<DashboardRole, string> = {
   admin: "Administrator",
   doctor: "Doctor",
   receptionist: "Front Desk",
-  patient: "Patient",
 };
 
 export function DashboardShell({
@@ -148,7 +139,7 @@ export function DashboardShell({
         </nav>
         <div className="p-4">
           <div className="mb-4 border-t border-[#c4c9dc]" />
-          {role !== "doctor" && role !== "patient" && (
+          {role !== "doctor" && (
             <Link
               href="/reception/dashboard#book-appointment"
               className="mb-5 flex h-14 items-center justify-center gap-3 rounded-lg bg-[#0755d9] px-5 text-base font-bold text-white shadow-sm"
