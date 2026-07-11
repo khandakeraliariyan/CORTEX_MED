@@ -2,9 +2,67 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useAuthStore } from "@/store/auth-store";
+import { useNotificationsStore } from "@/store/notifications-store";
 import { ROUTES } from "@/constants/routes";
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+export function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const notifications = useNotificationsStore((state) => state.notifications);
+  const markAllRead = useNotificationsStore((state) => state.markAllRead);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  return (
+    <div className="relative">
+      <button
+        aria-label="Notifications"
+        onClick={() => {
+          setOpen((v) => !v);
+          if (!open) markAllRead();
+        }}
+        className="relative"
+      >
+        ♙
+        {unreadCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-30 mt-3 w-80 rounded-xl border border-[#c4c9dc] bg-white text-left text-sm shadow-lg">
+            <div className="border-b border-[#d7dbea] px-4 py-3 font-black">Notifications</div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-4 py-6 text-center text-slate-500">No notifications yet.</p>
+              ) : (
+                notifications.map((notification) => (
+                  <div key={notification.id} className="border-b border-[#eef0fb] px-4 py-3">
+                    <p className="text-slate-800">{notification.message}</p>
+                    <span className="text-xs text-slate-500">{timeAgo(notification.createdAt)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 type NavItem = {
   label: string;
@@ -172,9 +230,7 @@ export function DashboardShell({
             />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl text-slate-900">
-            <button aria-label="Notifications">♙</button>
-            <button aria-label="Messages">▣</button>
-            <button aria-label="Calendar">▤</button>
+            <NotificationBell />
             <span className="h-8 w-px bg-[#c4c9dc]" />
             <div className="hidden text-right text-sm sm:block">
               <div className="font-bold text-slate-950">{displayName}</div>

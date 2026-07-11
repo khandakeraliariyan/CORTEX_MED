@@ -49,6 +49,10 @@ const createAppointment = async (payload) => {
         appointment.doctor
     );
 
+    NotificationService.patientBooked(
+        updatedAppointment
+    );
+
     return updatedAppointment;
 };
 

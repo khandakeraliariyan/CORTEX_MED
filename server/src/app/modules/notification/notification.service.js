@@ -13,6 +13,13 @@ const queueUpdated = (doctorId) => {
     );
 };
 
+const patientBooked = (appointment) => {
+    SocketService.emit(
+        SOCKET_EVENTS.PATIENT_BOOKED,
+        appointment
+    );
+};
+
 const patientCalled = (appointment) => {
     SocketService.emit(
         SOCKET_EVENTS.PATIENT_CALLED,
@@ -38,6 +45,7 @@ const waitUpdated = (doctorId) => {
 
 module.exports = {
     queueUpdated,
+    patientBooked,
     patientCalled,
     patientCompleted,
     waitUpdated,

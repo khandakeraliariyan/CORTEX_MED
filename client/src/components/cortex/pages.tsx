@@ -16,6 +16,7 @@ import {
   Footer,
   HeatMap,
   MetricCard,
+  NotificationBell,
   PageTitle,
   Panel,
   Progress,
@@ -1316,7 +1317,8 @@ function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; 
             <input className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none" placeholder="Search medical records..." />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl">
-            <span>♙</span><span>▣</span><span>□</span><span className="h-8 w-px bg-[#c4c9dc]" />
+            <NotificationBell />
+            <span className="h-8 w-px bg-[#c4c9dc]" />
             <div className="hidden text-right text-sm sm:block"><b>{userName}</b><div>Front Desk Officer</div></div>
             <Avatar name={userName} className="h-10 w-10" />
           </div>

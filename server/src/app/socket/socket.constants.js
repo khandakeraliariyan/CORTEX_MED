@@ -4,6 +4,8 @@ const SOCKET_EVENTS = {
 
     QUEUE_UPDATED: "queue:updated",
 
+    PATIENT_BOOKED: "patient:booked",
+
     PATIENT_CALLED: "patient:called",
 
     PATIENT_COMPLETED: "patient:completed",
