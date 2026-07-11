@@ -1,0 +1,58 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  ai-service:
+    build:
+      context: ../ai-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_BACKEND: ${LLM_BACKEND:-ollama}
+      # Ollama typically runs on the host machine, not in a container.
+      # host.docker.internal resolves to the host on Docker Desktop
+      # (Windows/Mac) and via the extra_hosts mapping below on Linux.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-llama3.1:8b-instruct-q4_0}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-8}
+      MAX_RETRIES: ${MAX_RETRIES:-1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  server:
+    build:
+      context: ../server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ../server/.env
+    environment:
+      PORT: 5000
+      DATABASE_URL: mongodb://mongo:27017/CORTEX_MED
+      CLIENT_URL: http://localhost:3000
+      AI_SERVICE_URL: http://ai-service:8000/triage
+    depends_on:
+      - mongo
+      - ai-service
+
+  client:
+    build:
+      context: ../client
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000/api/v1}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:5000}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+volumes:
+  mongo_data:

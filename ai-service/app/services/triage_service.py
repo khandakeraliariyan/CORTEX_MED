@@ -20,6 +20,9 @@ def _fallback_response() -> TriageResponse:
         reason=settings.fallback_reason,
         confidence=settings.fallback_confidence,
         factors=[],
+        risk="Medium",
+        department="General Medicine",
+        summary=settings.fallback_reason,
     )
 
 

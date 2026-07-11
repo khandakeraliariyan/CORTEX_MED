@@ -86,6 +86,14 @@ function priorityLabel(priority: number): string {
   return PRIORITY_LABELS[priority] ?? "Unknown";
 }
 
+function riskTone(risk: Appointment["riskLevel"]): "red" | "orange" | "blue" | "green" | "slate" {
+  if (risk === "Critical") return "red";
+  if (risk === "High") return "orange";
+  if (risk === "Medium") return "blue";
+  if (risk === "Low") return "green";
+  return "slate";
+}
+
 function AiExplainability({ appointment }: { appointment: Appointment }) {
   const confidencePct =
     appointment.triageConfidence != null ? Math.round(appointment.triageConfidence * 100) : null;
@@ -99,11 +107,27 @@ function AiExplainability({ appointment }: { appointment: Appointment }) {
           <StatusPill tone={confidenceTone}>{confidencePct}% confidence</StatusPill>
         )}
       </div>
-      <p className="mt-3 font-bold">
-        Priority P{appointment.priority} ({priorityLabel(appointment.priority)})
-      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="font-bold">
+          Priority P{appointment.priority} ({priorityLabel(appointment.priority)})
+        </span>
+        {appointment.riskLevel && (
+          <StatusPill tone={riskTone(appointment.riskLevel)}>{appointment.riskLevel} risk</StatusPill>
+        )}
+      </div>
+      {appointment.recommendedDepartment && (
+        <p className="mt-2 text-sm text-slate-700">
+          Suggested department: <b className="text-slate-900">{appointment.recommendedDepartment}</b>
+        </p>
+      )}
+      {appointment.aiSummary && (
+        <div className="mt-3 rounded-lg bg-white p-3">
+          <span className="text-xs font-black uppercase tracking-wide text-slate-500">AI Summary</span>
+          <p className="mt-1 text-sm text-slate-800">{appointment.aiSummary}</p>
+        </div>
+      )}
       {appointment.triageFactors.length > 0 && (
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
           {appointment.triageFactors.map((factor) => (
             <li key={factor}>{factor}</li>
           ))}

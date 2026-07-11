@@ -8,6 +8,9 @@ class TriageResponse(BaseModel):
     reason: str
     confidence: float = Field(..., ge=0, le=1)
     factors: List[str] = Field(default_factory=list)
+    risk: str
+    department: str
+    summary: str
 
     @field_validator("factors")
     @classmethod

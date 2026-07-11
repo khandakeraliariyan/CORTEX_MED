@@ -32,6 +32,9 @@ const runTriage = async (appointmentId) => {
             reason: "AI unavailable. Default priority assigned.",
             confidence: 0,
             factors: [],
+            risk: "Medium",
+            department: "General Medicine",
+            summary: "AI unavailable. Default priority assigned.",
         };
     }
 
@@ -39,6 +42,9 @@ const runTriage = async (appointmentId) => {
     appointment.triageReason = result.reason;
     appointment.triageConfidence = result.confidence;
     appointment.triageFactors = Array.isArray(result.factors) ? result.factors : [];
+    appointment.riskLevel = result.risk ?? null;
+    appointment.recommendedDepartment = result.department ?? null;
+    appointment.aiSummary = result.summary ?? null;
 
     await appointment.save();
 

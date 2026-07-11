@@ -50,13 +50,25 @@ Response:
   "priority": 1,
   "reason": "Symptoms suggest a possible cardiac emergency requiring immediate attention.",
   "confidence": 0.97,
-  "factors": ["Severe chest pain", "Difficulty breathing", "Pain radiating to left arm"]
+  "factors": ["Severe chest pain", "Difficulty breathing", "Pain radiating to left arm"],
+  "risk": "Critical",
+  "department": "Cardiology",
+  "summary": "Possible cardiac emergency. Immediate cardiology assessment recommended."
 }
 ```
 
-`factors` is the AI Explainability payload: short phrases naming the specific
-symptoms that drove the priority, rendered by the frontend as bullet points
-under "AI Reasoning" instead of a single opaque sentence.
+- `factors` is the AI Explainability payload: short phrases naming the specific
+  symptoms that drove the priority, rendered by the frontend as bullet points
+  under "AI Reasoning" instead of a single opaque sentence.
+- `risk` is one of `Low` / `Medium` / `High` / `Critical`. If the model omits
+  it or returns something unrecognized, it's derived from `priority` instead
+  of failing the request.
+- `department` is the single best-fit specialist department, chosen from a
+  fixed list in `app/core/prompts.py` (`DEPARTMENTS`). An unrecognized value
+  falls back to `"General Medicine"` rather than propagating a hallucinated
+  department name.
+- `summary` condenses a long/rambling symptom description into one or two
+  sentences a doctor can read in seconds, without introducing a diagnosis.
 
 Priority scale: `1` critical, `2` urgent, `3` moderate, `4` mild, `5` non-urgent.
 
@@ -106,7 +118,15 @@ JSON, the service retries (`MAX_RETRIES`, default 1) with a linear backoff,
 then falls back to a neutral response rather than raising an error:
 
 ```json
-{ "priority": 3, "reason": "AI unavailable. Default priority assigned.", "confidence": 0, "factors": [] }
+{
+  "priority": 3,
+  "reason": "AI unavailable. Default priority assigned.",
+  "confidence": 0,
+  "factors": [],
+  "risk": "Medium",
+  "department": "General Medicine",
+  "summary": "AI unavailable. Default priority assigned."
+}
 ```
 
 This guarantees appointment booking in the main app never blocks on the AI
