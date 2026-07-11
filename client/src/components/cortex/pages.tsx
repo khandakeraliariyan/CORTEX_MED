@@ -226,10 +226,10 @@ export function LandingPage() {
 
         <section id="pricing" className="mt-16 rounded-[20px] bg-[#2e69df] px-6 py-20 text-center text-white shadow-sm">
           <h2 className="text-3xl font-black">Ready to transform your hospital?</h2>
-          <p className="mx-auto mt-8 max-w-[650px] text-blue-100">Join 500+ clinics globally already using CortexMed to reduce patient frustration and improve medical outcomes.</p>
-          <div className="mt-9 flex justify-center gap-4">
-            <Link href={ROUTES.REGISTER} className="rounded-xl bg-white px-9 py-4 text-sm font-bold text-[#0755d9]">Get Started Today</Link>
-            <Link href="/login" className="rounded-xl border border-white/30 px-9 py-4 text-sm font-bold text-white">Contact Sales</Link>
+          <p className="mx-auto mt-5 max-w-[620px] text-blue-100">Use CortexMed to reduce patient frustration and improve care coordination.</p>
+          <div className="mt-8 flex justify-center gap-4">
+            <Link href={ROUTES.REGISTER}><Button variant="secondary">Get Started Today</Button></Link>
+            <Button className="border-white/40 bg-transparent">Contact Sales</Button>
           </div>
         </section>
       </main>
