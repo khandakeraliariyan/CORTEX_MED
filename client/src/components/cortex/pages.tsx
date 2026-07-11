@@ -1,10 +1,11 @@
 "use client";
 
-import { ReactNode, useState, type ChangeEvent, type FormEvent } from "react";
+import { ReactNode, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { isAxiosError } from "axios";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   AppLogo,
   Avatar,
@@ -24,9 +25,16 @@ import {
 } from "@/components/cortex/ui";
 import { login, register } from "@/services/auth-service";
 import { useChangePassword } from "@/features/authentication/hooks/use-change-password";
+import { useUpdateNotificationPreferences } from "@/features/authentication/hooks/use-notification-preferences";
+import { useDeactivateAccount } from "@/features/authentication/hooks/use-deactivate-account";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
-import type { SelfRegisterableRole } from "@/types/auth.types";
+import type { NotificationPreferences, SelfRegisterableRole } from "@/types/auth.types";
+import {
+  useHospitalSettings,
+  useUpdateHospitalSettings,
+} from "@/features/hospital/hooks/use-hospital-settings";
+import { useAiEngineStatus } from "@/features/triage/hooks/use-ai-engine-status";
 import {
   useCreateDoctor,
   useDeleteDoctor,
@@ -72,6 +80,70 @@ function priorityTone(priority: number): "red" | "orange" | "blue" | "slate" {
   if (priority <= 2) return "orange";
   if (priority <= 3) return "blue";
   return "slate";
+}
+
+const PRIORITY_LABELS: Record<number, string> = {
+  1: "Critical",
+  2: "Urgent",
+  3: "Moderate",
+  4: "Mild",
+  5: "Non-Urgent",
+};
+
+function priorityLabel(priority: number): string {
+  return PRIORITY_LABELS[priority] ?? "Unknown";
+}
+
+function riskTone(risk: Appointment["riskLevel"]): "red" | "orange" | "blue" | "green" | "slate" {
+  if (risk === "Critical") return "red";
+  if (risk === "High") return "orange";
+  if (risk === "Medium") return "blue";
+  if (risk === "Low") return "green";
+  return "slate";
+}
+
+function AiExplainability({ appointment }: { appointment: Appointment }) {
+  const confidencePct =
+    appointment.triageConfidence != null ? Math.round(appointment.triageConfidence * 100) : null;
+  const confidenceTone = confidencePct === null ? "slate" : confidencePct >= 70 ? "green" : confidencePct >= 40 ? "orange" : "red";
+
+  return (
+    <div className="rounded-xl bg-[#f0f1fb] p-5">
+      <div className="flex items-center justify-between gap-3">
+        <b className="text-[#0755d9]">AI REASONING</b>
+        {confidencePct !== null && (
+          <StatusPill tone={confidenceTone}>{confidencePct}% confidence</StatusPill>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="font-bold">
+          Priority P{appointment.priority} ({priorityLabel(appointment.priority)})
+        </span>
+        {appointment.riskLevel && (
+          <StatusPill tone={riskTone(appointment.riskLevel)}>{appointment.riskLevel} risk</StatusPill>
+        )}
+      </div>
+      {appointment.recommendedDepartment && (
+        <p className="mt-2 text-sm text-slate-700">
+          Suggested department: <b className="text-slate-900">{appointment.recommendedDepartment}</b>
+        </p>
+      )}
+      {appointment.aiSummary && (
+        <div className="mt-3 rounded-lg bg-white p-3">
+          <span className="text-xs font-black uppercase tracking-wide text-slate-500">AI Summary</span>
+          <p className="mt-1 text-sm text-slate-800">{appointment.aiSummary}</p>
+        </div>
+      )}
+      {appointment.triageFactors.length > 0 && (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+          {appointment.triageFactors.map((factor) => (
+            <li key={factor}>{factor}</li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-sm text-slate-700">{appointment.triageReason ?? "Not available"}</p>
+    </div>
+  );
 }
 
 function statusTone(status: Appointment["status"]): "blue" | "green" | "slate" | "red" {
@@ -535,7 +607,6 @@ export function AdminDashboardPage() {
       <PageTitle
         title="Analytics Overview"
         subtitle="Live hospital performance metrics."
-        actions={<><Button variant="secondary">Filters</Button><Button>Export Report</Button></>}
       />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon="+" label="Total Doctors" value={String(doctors.length)} />
@@ -620,8 +691,20 @@ function DoctorTable({ doctors }: { doctors: Doctor[] }) {
   );
 }
 
+function matchesSearch(appointment: Appointment, term: string): boolean {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return true;
+  return (
+    appointment.patientName.toLowerCase().includes(needle) ||
+    appointment.appointmentCode.toLowerCase().includes(needle) ||
+    String(appointment.tokenNumber).includes(needle) ||
+    (appointment.doctor?.user?.name ?? "").toLowerCase().includes(needle)
+  );
+}
+
 export function AppointmentManagementPage() {
   const { data: appointments = [], isLoading } = useAppointments();
+  const [search, setSearch] = useState("");
 
   const waiting = appointments.filter((a) => a.status === "waiting");
   const urgent = appointments.filter((a) => a.priority <= 2).length;
@@ -633,18 +716,13 @@ export function AppointmentManagementPage() {
   const barValues = appointments.length
     ? appointments.slice(0, 10).map((appointment) => Math.max(24, Math.min(96, appointment.estimatedWait * 4 || 28)))
     : [38, 62, 48, 82, 67, 57, 43, 33, 52, 72];
+  const visibleAppointments = appointments.filter((a) => matchesSearch(a, search));
 
   return (
-    <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients...">
+    <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle
         title="Appointment Management"
         subtitle="Real-time scheduling and patient flow optimization."
-        actions={
-          <>
-            <Button variant="secondary" className="h-12 rounded-xl px-5">▾ Filter View</Button>
-            <Button variant="secondary" className="h-12 rounded-xl px-5">⌄ Export PDF</Button>
-          </>
-        }
       />
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <ReceptionMetric icon="♚" label="Total Scheduled" value={String(appointments.length || 0)} delta="+12%" tone="blue" />
@@ -655,7 +733,7 @@ export function AppointmentManagementPage() {
       {isLoading ? (
         <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading appointments..." /></div>
       ) : (
-        <AppointmentTable appointments={appointments} />
+        <AppointmentTable appointments={visibleAppointments} />
       )}
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <section className="rounded-xl border border-[#d7dbea] bg-white p-6 shadow-sm">
@@ -976,6 +1054,7 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -991,6 +1070,16 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
 
   const available = doctors.filter((d) => d.status === "available").length;
   const onLeave = doctors.filter((d) => d.status === "on_leave").length;
+  const visibleDoctors = search.trim()
+    ? doctors.filter((doctor) => {
+        const needle = search.trim().toLowerCase();
+        return (
+          doctor.user.name.toLowerCase().includes(needle) ||
+          doctor.department.toLowerCase().includes(needle) ||
+          doctor.specialty.toLowerCase().includes(needle)
+        );
+      })
+    : doctors;
 
   const updateField = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -1018,11 +1107,11 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   };
 
   return (
-    <DashboardShell role={role} active="Doctors" searchPlaceholder="Search medical staff...">
+    <DashboardShell role={role} active="Doctors" searchPlaceholder="Search medical staff..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle
         title="Medical Staff Directory"
         subtitle="View department heads, clinicians, and surgical teams in real-time."
-        actions={canManageDoctors ? <><Button variant="secondary">All Departments</Button><Button onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Add Doctor"}</Button></> : <Button variant="secondary">All Departments</Button>}
+        actions={canManageDoctors ? <Button onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Add Doctor"}</Button> : undefined}
       />
 
       {canManageDoctors && open && (
@@ -1054,11 +1143,11 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
       <div className="mt-8">
         {isLoading ? (
           <EmptyState label="Loading staff directory..." />
-        ) : doctors.length === 0 ? (
-          <EmptyState label="No staff members added yet." />
+        ) : visibleDoctors.length === 0 ? (
+          <EmptyState label={doctors.length === 0 ? "No staff members added yet." : "No staff match your search."} />
         ) : (
           <div className="grid gap-7 xl:grid-cols-3">
-            {doctors.map((doctor) => (
+            {visibleDoctors.map((doctor) => (
               <div key={doctor._id} className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
                 {editingId === doctor._id ? (
                   <DoctorEditForm doctor={doctor} onDone={() => setEditingId(null)} />
@@ -1075,7 +1164,6 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
                         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{deleteError}</p>
                       )}
                       <div className="mt-7 flex gap-4">
-                        <Button variant="secondary">Profile</Button>
                         {canManageDoctors && (
                           <>
                             <Button variant="secondary" onClick={() => setEditingId(doctor._id)}>Edit</Button>
@@ -1134,13 +1222,20 @@ export function AnalyticsPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
   const analytics = useHospitalAnalytics(appointments, doctors);
+  const [search, setSearch] = useState("");
 
   const waiting = appointments.filter((a) => a.status === "waiting");
   const { critical, high: highPriority, routine } = analytics.priorityBreakdown;
+  const visiblePerformance = search.trim()
+    ? analytics.doctorPerformance.filter((row) =>
+        row.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+        row.department.toLowerCase().includes(search.trim().toLowerCase())
+      )
+    : analytics.doctorPerformance;
 
   return (
-    <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search analytics...">
-      <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." actions={<><Button variant="secondary">Filter Range</Button><Button>Export Report</Button></>} />
+    <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search practitioners..." searchValue={search} onSearchChange={setSearch}>
+      <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." />
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Daily Patients" value={String(appointments.length)} tone="blue" />
         <MetricCard icon="O" label="Avg Wait Time" value={waiting.length ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
@@ -1163,7 +1258,7 @@ export function AnalyticsPage() {
           <HeatMap data={analytics.weeklyHeatmap} rowLabels={WEEKDAY_LABELS} columnLabels={HOUR_BUCKET_LABELS} />
         </Panel>
         <Panel title="Specialist Performance" subtitle="Patients seen per practitioner">
-          <SpecialistPerformanceTable rows={analytics.doctorPerformance} />
+          <SpecialistPerformanceTable rows={visiblePerformance} />
         </Panel>
       </div>
     </DashboardShell>
@@ -1183,9 +1278,14 @@ export function ReceptionDashboardPage() {
     ? Math.round(waiting.reduce((sum, a) => sum + a.estimatedWait, 0) / waiting.length)
     : 0;
 
+  const [queueSearch, setQueueSearch] = useState("");
+  const visibleWaiting = queueSearch.trim()
+    ? waiting.filter((a) => a.patientName.toLowerCase().includes(queueSearch.trim().toLowerCase()))
+    : waiting;
+
   const [form, setForm] = useState({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
+  const [success, setSuccess] = useState<Appointment | null>(null);
 
   const resetForm = () => setForm({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
 
@@ -1202,7 +1302,7 @@ export function ReceptionDashboardPage() {
         doctor: form.doctor,
         symptoms: form.symptoms,
       });
-      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
+      setSuccess(appointment);
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1210,7 +1310,7 @@ export function ReceptionDashboardPage() {
   };
 
   return (
-    <FrontDeskDashboardShell userName={currentUser?.name ?? "Front Desk"}>
+    <FrontDeskDashboardShell userName={currentUser?.name ?? "Front Desk"} searchValue={queueSearch} onSearchChange={setQueueSearch}>
       <div className="mb-7">
         <h1 className="text-4xl font-black tracking-tight">Analytics Overview</h1>
         <p className="mt-1 text-lg text-slate-700">Hospital performance metrics for today.</p>
@@ -1245,10 +1345,13 @@ export function ReceptionDashboardPage() {
             <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-32 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the patient's condition..." /></label>
             {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
             {success && (
-              <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-                Booked - token #{success.tokenNumber}, code {success.code}.{" "}
-                <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
-              </p>
+              <div className="md:col-span-2 space-y-3">
+                <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                  Booked - token #{success.tokenNumber}, code {success.appointmentCode}.{" "}
+                  <Link href={`/track/${success.appointmentCode}`} className="underline" target="_blank">Open patient tracking link</Link>
+                </p>
+                <AiExplainability appointment={success} />
+              </div>
             )}
             <div className="md:col-span-2 flex justify-end gap-4">
               <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
@@ -1257,7 +1360,7 @@ export function ReceptionDashboardPage() {
           </form>
         </FrontDeskCard>
         <FrontDeskCard title="Live Queue" action={<StatusPill>{waiting.length} Live</StatusPill>}>
-          <LiveQueueCards patients={waiting.slice(0, 5)} />
+          <LiveQueueCards patients={visibleWaiting.slice(0, 5)} />
         </FrontDeskCard>
       </div>
 
@@ -1271,7 +1374,17 @@ export function ReceptionDashboardPage() {
   );
 }
 
-function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; userName: string }) {
+function FrontDeskDashboardShell({
+  children,
+  userName,
+  searchValue,
+  onSearchChange,
+}: {
+  children: ReactNode;
+  userName: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+}) {
   const router = useRouter();
   const clearSession = useAuthStore((state) => state.clearSession);
 
@@ -1314,7 +1427,12 @@ function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; 
         <div className="flex h-[64px] items-center gap-5 px-6">
           <div className="relative w-full max-w-[390px]">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">⌕</span>
-            <input className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none" placeholder="Search medical records..." />
+            <input
+              className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none"
+              placeholder="Search live queue by patient name..."
+              value={searchValue ?? undefined}
+              onChange={onSearchChange ? (event) => onSearchChange(event.target.value) : undefined}
+            />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl">
             <NotificationBell />
@@ -1561,16 +1679,20 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
   const { data: doctorAppointments = [] } = useAppointments(doctorId ?? undefined);
   const callNext = useCallNextPatient(doctorId);
   const completePatient = useCompletePatient(doctorId);
+  const [search, setSearch] = useState("");
 
   const current = queue?.current ?? null;
   const waiting = queue?.waiting ?? [];
+  const visibleWaiting = search.trim()
+    ? waiting.filter((a) => a.patientName.toLowerCase().includes(search.trim().toLowerCase()) || String(a.tokenNumber).includes(search.trim()))
+    : waiting;
   const stats = queue?.stats;
   const recentActivity = [...doctorAppointments]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
 
   return (
-    <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Patients Waiting" value={String(waiting.length)} />
         <MetricCard icon="O" label="Avg. Consultation" value={stats ? `${stats.avgConsultationTime}m` : "--"} tone="green" />
@@ -1585,11 +1707,11 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
               <div>
                 <div className="flex justify-between">
                   <div><h2 className="text-2xl font-black">{current.patientName}</h2><p>Token #{current.tokenNumber} - {current.age} yrs, {current.gender}</p></div>
-                  <div><b className="text-[#0755d9]">PRIORITY P{current.priority}</b></div>
+                  <div><b className="text-[#0755d9]">PRIORITY P{current.priority} ({priorityLabel(current.priority)})</b></div>
                 </div>
                 <div className="mt-6 grid gap-5 md:grid-cols-2">
                   <div className="rounded-xl bg-[#f0f1fb] p-5"><b className="text-[#0755d9]">PRESENTING SYMPTOMS</b><p className="mt-3">{current.symptoms}</p></div>
-                  <div className="rounded-xl bg-[#f0f1fb] p-5"><b className="text-[#0755d9]">AI REASONING</b><p className="mt-3">{current.triageReason ?? "Not available"}</p></div>
+                  <AiExplainability appointment={current} />
                 </div>
                 <div className="mt-7 flex flex-wrap gap-4">
                   <Button disabled={completePatient.isPending} onClick={() => completePatient.mutate(current._id)} className="disabled:opacity-60">{completePatient.isPending ? "Completing..." : "Complete Consultation"}</Button>
@@ -1615,7 +1737,11 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Panel title="Patient Queue" action={<Button variant="secondary" disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">Call Next Patient</Button>}>
-          {waiting.length === 0 ? <EmptyState label="No patients waiting." /> : <div className="space-y-4">{waiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>}
+          {visibleWaiting.length === 0 ? (
+            <EmptyState label={waiting.length === 0 ? "No patients waiting." : "No patients match your search."} />
+          ) : (
+            <div className="space-y-4">{visibleWaiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>
+          )}
         </Panel>
         <Panel title="Timeline">
           {recentActivity.length === 0 ? (
@@ -1650,7 +1776,7 @@ export function DoctorEmergencyIntakePage() {
     symptoms: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
+  const [success, setSuccess] = useState<Appointment | null>(null);
 
   const resetForm = () => {
     setForm({ patientName: "", age: "", gender: "male", phone: "", symptoms: "" });
@@ -1675,7 +1801,7 @@ export function DoctorEmergencyIntakePage() {
         doctor: user.doctorId,
         symptoms: form.symptoms,
       });
-      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
+      setSuccess(appointment);
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1694,10 +1820,13 @@ export function DoctorEmergencyIntakePage() {
           <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-36 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the emergency condition..." /></label>
           {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
           {success && (
-            <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
-              Emergency intake booked - token #{success.tokenNumber}, code {success.code}.{" "}
-              <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
-            </p>
+            <div className="md:col-span-2 space-y-3">
+              <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                Emergency intake booked - token #{success.tokenNumber}, code {success.appointmentCode}.{" "}
+                <Link href={`/track/${success.appointmentCode}`} className="underline" target="_blank">Open patient tracking link</Link>
+              </p>
+              <AiExplainability appointment={success} />
+            </div>
           )}
           <div className="md:col-span-2 flex justify-end gap-4">
             <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
@@ -1712,12 +1841,14 @@ export function DoctorEmergencyIntakePage() {
 export function DoctorHistoryPage() {
   const user = useAuthStore((state) => state.user);
   const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+  const [search, setSearch] = useState("");
 
   const completed = appointments.filter((a) => a.status === "completed").length;
   const cancelled = appointments.filter((a) => a.status === "cancelled").length;
+  const visibleAppointments = appointments.filter((a) => matchesSearch(a, search));
 
   return (
-    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle title="Consultation History" subtitle="Every appointment you have handled, most recent first." />
       <div className="grid gap-6 md:grid-cols-3">
         <MetricCard icon="P" label="Total Appointments" value={String(appointments.length)} />
@@ -1728,7 +1859,7 @@ export function DoctorHistoryPage() {
         <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading history..." /></div>
       ) : (
         <div className="mt-7">
-          <AppointmentTable appointments={appointments} />
+          <AppointmentTable appointments={visibleAppointments} />
         </div>
       )}
     </DashboardShell>
@@ -1773,10 +1904,14 @@ function summarizePatients(appointments: Appointment[]): PatientSummary[] {
 export function DoctorPatientsPage() {
   const user = useAuthStore((state) => state.user);
   const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
-  const patients = summarizePatients(appointments);
+  const [search, setSearch] = useState("");
+  const allPatients = summarizePatients(appointments);
+  const patients = search.trim()
+    ? allPatients.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()) || p.phone.includes(search.trim()))
+    : allPatients;
 
   return (
-    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID...">
+    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle title="My Patients" subtitle="Everyone you have treated, with their visit history." />
       <div className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
         <div className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
@@ -1785,7 +1920,7 @@ export function DoctorPatientsPage() {
         {isLoading ? (
           <div className="p-6"><EmptyState label="Loading patients..." /></div>
         ) : patients.length === 0 ? (
-          <div className="p-6"><EmptyState label="No patients treated yet." /></div>
+          <div className="p-6"><EmptyState label={allPatients.length === 0 ? "No patients treated yet." : "No patients match your search."} /></div>
         ) : (
           patients.map((patient) => (
             <div key={patient.key} className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] items-center border-t border-[#d7dbea] px-6 py-5">
@@ -1873,6 +2008,219 @@ export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string
   );
 }
 
+function HospitalInformationPanel({ canEdit }: { canEdit: boolean }) {
+  const { data: settings, isLoading } = useHospitalSettings();
+  const updateSettings = useUpdateHospitalSettings();
+  const [form, setForm] = useState({ hospitalName: "", facilityId: "" });
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setForm({ hospitalName: settings.hospitalName, facilityId: settings.facilityId });
+    }
+  }, [settings]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaved(false);
+    await updateSettings.mutateAsync(form);
+    setSaved(true);
+  };
+
+  return (
+    <Panel title="Hospital Information">
+      {isLoading ? (
+        <EmptyState label="Loading hospital settings..." />
+      ) : (
+        <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
+          <label className="block">
+            <span className="font-bold">Hospital Name</span>
+            <input
+              disabled={!canEdit}
+              required
+              value={form.hospitalName}
+              onChange={(e) => setForm((p) => ({ ...p, hospitalName: e.target.value }))}
+              className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] px-4 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          <label className="block">
+            <span className="font-bold">Facility ID</span>
+            <input
+              disabled={!canEdit}
+              value={form.facilityId}
+              onChange={(e) => setForm((p) => ({ ...p, facilityId: e.target.value }))}
+              className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] px-4 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          {canEdit && (
+            <div className="md:col-span-2 flex items-center justify-end gap-4">
+              {saved && <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Saved.</span>}
+              <Button type="submit" disabled={updateSettings.isPending} className="disabled:opacity-60">
+                {updateSettings.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          )}
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+function ThemeAppearancePanel() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const modes: Array<{ key: string; label: string }> = [
+    { key: "light", label: "Light Mode" },
+    { key: "dark", label: "Dark Mode" },
+    { key: "system", label: "Auto System" },
+  ];
+
+  return (
+    <Panel title="Theme & Appearance">
+      <div className="grid gap-4 md:grid-cols-3">
+        {modes.map((mode) => {
+          const active = mounted && theme === mode.key;
+          return (
+            <button
+              key={mode.key}
+              type="button"
+              onClick={() => setTheme(mode.key)}
+              className={`rounded-lg border p-4 text-left ${active ? "border-[#0755d9] ring-2 ring-[#0755d9]/30" : "border-[#c4c9dc] dark:border-slate-700"}`}
+            >
+              <div className="h-20 rounded bg-[#f0f1fb] dark:bg-slate-800" />
+              <b className="mt-3 block">{mode.label}</b>
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+const NOTIFICATION_ITEMS: Array<{ key: keyof NotificationPreferences; label: string }> = [
+  { key: "criticalAlerts", label: "Critical Patient Alerts" },
+  { key: "dailySummary", label: "Daily Summary Reports" },
+  { key: "aiSuggestions", label: "AI Diagnostic Suggestions" },
+];
+
+function NotificationsPanel() {
+  const user = useAuthStore((state) => state.user);
+  const updatePreferences = useUpdateNotificationPreferences();
+  const preferences: NotificationPreferences = user?.notificationPreferences ?? {
+    criticalAlerts: true,
+    dailySummary: true,
+    aiSuggestions: true,
+  };
+
+  const toggle = (key: keyof NotificationPreferences) => {
+    updatePreferences.mutate({ ...preferences, [key]: !preferences[key] });
+  };
+
+  return (
+    <Panel title="Notifications">
+      <div className="space-y-5">
+        {NOTIFICATION_ITEMS.map((item) => (
+          <div key={item.key} className="flex items-center justify-between border-b border-[#d7dbea] pb-4 dark:border-slate-700">
+            <span>{item.label}</span>
+            <button
+              type="button"
+              aria-pressed={preferences[item.key]}
+              onClick={() => toggle(item.key)}
+              disabled={updatePreferences.isPending}
+              className={`h-6 w-11 rounded-full transition disabled:opacity-60 ${preferences[item.key] ? "bg-[#0755d9]" : "bg-slate-300 dark:bg-slate-600"}`}
+            >
+              <span className={`block h-5 w-5 rounded-full bg-white shadow transition ${preferences[item.key] ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function AiEngineStatusPanel() {
+  const { data: status, isLoading } = useAiEngineStatus();
+
+  return (
+    <Panel title="AI Engine Status" subtitle="Cortex AI Triage Engine (CATE) connectivity">
+      {isLoading ? (
+        <EmptyState label="Checking AI engine..." />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</span>
+            <div className="mt-2">
+              <StatusPill tone={status?.online ? "green" : "red"}>{status?.online ? "Online" : "Offline"}</StatusPill>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Backend</span>
+            <p className="mt-2 font-bold">{status?.llm_backend ?? "--"}</p>
+          </div>
+          <div className="rounded-lg border border-[#c4c9dc] p-4 dark:border-slate-700">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Model</span>
+            <p className="mt-2 font-bold">{status?.llm_model ?? "--"}</p>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function DangerZonePanel() {
+  const deactivate = useDeactivateAccount();
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await deactivate.mutateAsync({ currentPassword: password });
+      clearSession();
+      router.replace(ROUTES.LOGIN);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <Panel className="border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-black text-red-700 dark:text-red-400">Danger Zone</h2>
+          <p>Deactivate your account. You will be logged out immediately and an administrator will need to reactivate it.</p>
+        </div>
+        <Button variant="danger" onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "Deactivate My Account"}</Button>
+      </div>
+      {open && (
+        <form onSubmit={handleSubmit} className="mt-5 flex flex-wrap items-end gap-4">
+          <label className="block">
+            <span className="font-bold">Confirm Password</span>
+            <input
+              required
+              type="password"
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-2 h-12 rounded-lg border border-[#c4c9dc] px-4 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+          <Button type="submit" variant="danger" disabled={deactivate.isPending} className="disabled:opacity-60">
+            {deactivate.isPending ? "Deactivating..." : "Confirm Deactivation"}
+          </Button>
+        </form>
+      )}
+      {error && <p className="mt-4 rounded-lg bg-red-100 px-4 py-3 text-sm font-bold text-red-800">{error}</p>}
+    </Panel>
+  );
+}
+
 function SecurityPrivacyPanel() {
   const changePassword = useChangePassword();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -1910,24 +2258,31 @@ function SecurityPrivacyPanel() {
   );
 }
 
-export function SettingsPage() {
+export function SettingsPage({ role = "admin" }: { role?: "admin" | "receptionist" } = {}) {
   const user = useAuthStore((state) => state.user);
+  const canManageHospital = role === "admin";
 
   return (
-    <DashboardShell role="admin" active="Settings" searchPlaceholder="Search settings...">
+    <DashboardShell role={role} active="Settings" searchPlaceholder="Search settings...">
       <PageTitle title="Settings" subtitle="Manage hospital configurations, user profile, and system preferences." />
       <div className="grid gap-8 xl:grid-cols-[180px_1fr]">
-        <nav className="space-y-4 text-sm"><b>Profile Details</b><p>Hospital Information</p><p>Theme & Appearance</p><p>Notifications</p><p>AI Intelligence</p><p className="font-bold text-[#0755d9]">Security & Privacy</p><p>Danger Zone</p></nav>
+        <nav className="space-y-4 text-sm">
+          <b>Profile</b>
+          <p>Hospital Information</p>
+          <p>Theme & Appearance</p>
+          <p>Notifications</p>
+          {canManageHospital && <p>AI Engine</p>}
+          <p className="font-bold text-[#0755d9]">Security & Privacy</p>
+          <p>Danger Zone</p>
+        </nav>
         <div className="space-y-7">
           <Panel><div className="flex items-center gap-5"><Avatar name={user?.name} className="h-24 w-24" /><div><h2 className="text-2xl font-black">{user?.name ?? "Your Profile"}</h2><StatusPill>Verified</StatusPill></div></div></Panel>
-          <Panel title="Profile Details"><div className="grid gap-5 md:grid-cols-2"><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" defaultValue={user?.name ?? ""} placeholder="Full Name" /><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" defaultValue={user?.email ?? ""} placeholder="Email Address" /></div></Panel>
-          <Panel title="Hospital Information"><div className="grid gap-5 md:grid-cols-2"><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Hospital Name" /><input className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Facility ID" /></div></Panel>
-          <Panel title="Theme & Appearance"><div className="grid gap-4 md:grid-cols-3">{["Light Mode", "Dark Mode", "Auto System"].map((mode) => <div key={mode} className="rounded-lg border border-[#c4c9dc] p-4"><div className="h-20 rounded bg-[#f0f1fb]" /><b className="mt-3 block">{mode}</b></div>)}</div></Panel>
-          <Panel title="Notifications"><div className="space-y-5">{["Critical Patient Alerts", "Daily Summary Reports", "AI Diagnostic Suggestions"].map((item) => <div key={item} className="flex justify-between border-b border-[#d7dbea] pb-4"><span>{item}</span><span className="h-6 w-11 rounded-full bg-slate-300" /></div>)}</div></Panel>
-          <Panel title="AI Intelligence Settings"><Progress value={0} /><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-lg border border-[#c4c9dc] p-4">Copilot Mode</div><div className="rounded-lg border border-[#c4c9dc] p-4">Audit Mode</div></div></Panel>
+          <HospitalInformationPanel canEdit={canManageHospital} />
+          <ThemeAppearancePanel />
+          <NotificationsPanel />
+          {canManageHospital && <AiEngineStatusPanel />}
           <SecurityPrivacyPanel />
-          <Panel className="border-red-200 bg-red-50"><div className="flex justify-between"><div><h2 className="text-xl font-black text-red-700">Danger Zone</h2><p>Deactivate hospital instance and archive clinical records.</p></div><Button variant="danger">Terminate System</Button></div></Panel>
-          <div className="flex justify-end gap-4"><Button variant="secondary">Discard Changes</Button><Button>Save Settings</Button></div>
+          <DangerZonePanel />
         </div>
       </div>
     </DashboardShell>
@@ -1935,6 +2290,8 @@ export function SettingsPage() {
 }
 
 export function NotFoundPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-[#fbfaff] text-slate-950">
       <header className="border-b border-[#c4c9dc]">
@@ -1946,7 +2303,7 @@ export function NotFoundPage() {
           <h1 className="mt-16 text-6xl font-black text-[#0755d9]">404</h1>
           <h2 className="mx-auto mt-6 max-w-[620px] text-4xl font-black">Looks like this patient record doesn&apos;t exist.</h2>
           <p className="mx-auto mt-6 max-w-[620px] text-xl leading-8 text-slate-600">The data you&apos;re looking for might have been archived, moved, or the ID provided is incorrect.</p>
-          <div className="mt-10 flex justify-center gap-5"><Link href="/"><Button>Back Home</Button></Link><Button variant="secondary">Previous Page</Button></div>
+          <div className="mt-10 flex justify-center gap-5"><Link href="/"><Button>Back Home</Button></Link><Button variant="secondary" onClick={() => router.back()}>Previous Page</Button></div>
         </div>
       </main>
       <Footer />

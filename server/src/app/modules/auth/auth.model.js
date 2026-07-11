@@ -34,6 +34,12 @@ const userSchema = new mongoose.Schema(
             default: true,
         },
 
+        notificationPreferences: {
+            criticalAlerts: { type: Boolean, default: true },
+            dailySummary: { type: Boolean, default: true },
+            aiSuggestions: { type: Boolean, default: true },
+        },
+
         lastLogin: Date,
     },
     {

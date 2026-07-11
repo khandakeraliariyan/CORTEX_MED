@@ -43,9 +43,25 @@ const changePasswordValidation = z.object({
     }),
 });
 
+const notificationPreferencesValidation = z.object({
+    body: z.object({
+        criticalAlerts: z.boolean(),
+        dailySummary: z.boolean(),
+        aiSuggestions: z.boolean(),
+    }),
+});
+
+const deactivateAccountValidation = z.object({
+    body: z.object({
+        currentPassword: z.string().min(6),
+    }),
+});
+
 module.exports = {
     registerValidation,
     loginValidation,
     refreshValidation,
     changePasswordValidation,
+    notificationPreferencesValidation,
+    deactivateAccountValidation,
 };

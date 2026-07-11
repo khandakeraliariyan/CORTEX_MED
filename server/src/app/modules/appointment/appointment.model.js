@@ -69,6 +69,27 @@ const appointmentSchema = new mongoose.Schema(
             default: null,
         },
 
+        triageFactors: {
+            type: [String],
+            default: [],
+        },
+
+        riskLevel: {
+            type: String,
+            enum: ["Low", "Medium", "High", "Critical"],
+            default: null,
+        },
+
+        recommendedDepartment: {
+            type: String,
+            default: null,
+        },
+
+        aiSummary: {
+            type: String,
+            default: null,
+        },
+
         aiModel: {
             type: String,
             default: null,

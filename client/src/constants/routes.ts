@@ -11,6 +11,7 @@ export const ROUTES = {
     QUEUE: "/reception/queue",
     PATIENTS: "/reception/patients",
     APPOINTMENTS: "/reception/appointments",
+    SETTINGS: "/reception/settings",
   },
   DOCTOR: {
     DASHBOARD: "/doctor/dashboard",

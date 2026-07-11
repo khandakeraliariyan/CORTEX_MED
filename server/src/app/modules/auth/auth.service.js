@@ -63,6 +63,10 @@ const loginUser = async (payload) => {
         throw new AppError(404, "User not found");
     }
 
+    if (!user.isActive) {
+        throw new AppError(403, "This account has been deactivated");
+    }
+
     const matched = await comparePassword(
         payload.password,
         user.password
@@ -164,6 +168,37 @@ const changePassword = async (userId, currentPassword, newPassword) => {
     await user.save();
 };
 
+const updateNotificationPreferences = async (userId, preferences) => {
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { notificationPreferences: preferences } },
+        { new: true }
+    );
+
+    if (!user) {
+        throw new AppError(404, "User not found");
+    }
+
+    return user.notificationPreferences;
+};
+
+const deactivateAccount = async (userId, currentPassword) => {
+    const user = await User.findById(userId).select("+password");
+
+    if (!user) {
+        throw new AppError(404, "User not found");
+    }
+
+    const matched = await comparePassword(currentPassword, user.password);
+
+    if (!matched) {
+        throw new AppError(401, "Current password is incorrect");
+    }
+
+    user.isActive = false;
+    await user.save();
+};
+
 const getMe = async (userId) => {
     const user = await User.findById(userId);
 
@@ -188,5 +223,7 @@ module.exports = {
     loginUser,
     refreshAccessToken,
     changePassword,
+    updateNotificationPreferences,
+    deactivateAccount,
     getMe,
 };

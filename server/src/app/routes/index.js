@@ -7,12 +7,14 @@ const doctorRoutes = require("../modules/doctor/doctor.route");
 const appointmentRoutes = require("../modules/appointment/appointment.route");
 const triageRoutes = require("../modules/triage/triage.route");
 const queueRoutes = require("../modules/queue/queue.route");
+const hospitalRoutes = require("../modules/hospital/hospital.route");
 
 router.use("/auth", authRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/appointments", appointmentRoutes);
 router.use("/triage", triageRoutes);
 router.use("/queue", queueRoutes);
+router.use("/hospital-settings", hospitalRoutes);
 
 router.get("/", (req, res) => {
     res.json({

@@ -43,16 +43,16 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-30 mt-3 w-80 rounded-xl border border-[#c4c9dc] bg-white text-left text-sm shadow-lg">
-            <div className="border-b border-[#d7dbea] px-4 py-3 font-black">Notifications</div>
+          <div className="absolute right-0 z-30 mt-3 w-80 rounded-xl border border-[#c4c9dc] bg-white text-left text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="border-b border-[#d7dbea] px-4 py-3 font-black dark:border-slate-700 dark:text-slate-100">Notifications</div>
             <div className="max-h-80 overflow-y-auto">
               {notifications.length === 0 ? (
-                <p className="px-4 py-6 text-center text-slate-500">No notifications yet.</p>
+                <p className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">No notifications yet.</p>
               ) : (
                 notifications.map((notification) => (
-                  <div key={notification.id} className="border-b border-[#eef0fb] px-4 py-3">
-                    <p className="text-slate-800">{notification.message}</p>
-                    <span className="text-xs text-slate-500">{timeAgo(notification.createdAt)}</span>
+                  <div key={notification.id} className="border-b border-[#eef0fb] px-4 py-3 dark:border-slate-800">
+                    <p className="text-slate-800 dark:text-slate-200">{notification.message}</p>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{timeAgo(notification.createdAt)}</span>
                   </div>
                 ))
               )}
@@ -92,7 +92,7 @@ const receptionNav: NavItem[] = [
   { label: "Doctors", href: "/reception/doctors", icon: "▣" },
   { label: "Queue", href: "/reception/queue", icon: "◉" },
   { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
-  { label: "Settings", href: "#", icon: "⚙" },
+  { label: "Settings", href: "/reception/settings", icon: "⚙" },
 ];
 
 export function AppLogo({ compact = false }: { compact?: boolean }) {
@@ -104,11 +104,11 @@ export function AppLogo({ compact = false }: { compact?: boolean }) {
         </span>
       )}
       <span>
-        <span className="block text-2xl font-black leading-none text-[#004bd1]">
+        <span className="block text-2xl font-black leading-none text-[#004bd1] dark:text-[#5b9bff]">
           CortexMed
         </span>
         {!compact && (
-          <span className="mt-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-700">
+          <span className="mt-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-400">
             Smart Hospital
           </span>
         )}
@@ -151,11 +151,15 @@ export function DashboardShell({
   role,
   active,
   searchPlaceholder = "Search medical records...",
+  searchValue,
+  onSearchChange,
   children,
 }: {
   role: DashboardRole;
   active: string;
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   children: ReactNode;
 }) {
   const nav = sidebarNavFor(role);
@@ -171,8 +175,8 @@ export function DashboardShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f7ff] text-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[276px] border-r border-[#c9cde0] bg-[#f1f3ff] lg:flex lg:flex-col">
+    <div className="min-h-screen bg-[#f8f7ff] text-slate-950 dark:bg-slate-950 dark:text-slate-100">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[276px] border-r border-[#c9cde0] bg-[#f1f3ff] lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
         <div className="flex h-[92px] items-center px-8">
           <AppLogo />
         </div>
@@ -186,7 +190,7 @@ export function DashboardShell({
                 className={`flex h-12 items-center gap-4 rounded-lg px-5 text-[15px] font-medium transition ${
                   selected
                     ? "bg-[#3269ea] text-white shadow-sm"
-                    : "text-slate-800 hover:bg-white"
+                    : "text-slate-800 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
                 }`}
               >
                 <span className="grid h-6 w-6 place-items-center text-lg font-black">{item.icon}</span>
@@ -196,7 +200,7 @@ export function DashboardShell({
           })}
         </nav>
         <div className="p-4">
-          <div className="mb-4 border-t border-[#c4c9dc]" />
+          <div className="mb-4 border-t border-[#c4c9dc] dark:border-slate-800" />
           {role !== "doctor" && (
             <Link
               href="/reception/dashboard#book-appointment"
@@ -210,31 +214,33 @@ export function DashboardShell({
               <span className="text-2xl leading-none">+</span> Emergency Intake
             </Link>
           )}
-          <div className="space-y-3 text-slate-700">
+          <div className="space-y-3 text-slate-700 dark:text-slate-400">
             <Link href="#" className="flex h-10 items-center gap-4 px-4">? Help Center</Link>
-            <button onClick={handleLogout} className="flex h-10 w-full items-center gap-4 px-4 text-left text-red-600">↪ Logout</button>
+            <button onClick={handleLogout} className="flex h-10 w-full items-center gap-4 px-4 text-left text-red-600 dark:text-red-400">↪ Logout</button>
           </div>
         </div>
       </aside>
 
-      <header className="sticky top-0 z-10 border-b border-[#c4c9dc] bg-[#fbfaff]/95 backdrop-blur lg:ml-[276px]">
+      <header className="sticky top-0 z-10 border-b border-[#c4c9dc] bg-[#fbfaff]/95 backdrop-blur lg:ml-[276px] dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex h-[64px] items-center gap-5 px-5 lg:px-8">
           <div className="lg:hidden">
             <AppLogo compact />
           </div>
           <div className="relative hidden w-full max-w-[430px] sm:block">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500">⌕</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-slate-500 dark:text-slate-400">⌕</span>
             <input
-              className="h-10 w-full rounded-full border border-transparent bg-[#f1f2fb] pl-12 pr-4 outline-none"
+              className="h-10 w-full rounded-full border border-transparent bg-[#f1f2fb] pl-12 pr-4 outline-none dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder={searchPlaceholder}
+              value={searchValue ?? undefined}
+              onChange={onSearchChange ? (event) => onSearchChange(event.target.value) : undefined}
             />
           </div>
-          <div className="ml-auto flex items-center gap-5 text-xl text-slate-900">
+          <div className="ml-auto flex items-center gap-5 text-xl text-slate-900 dark:text-slate-200">
             <NotificationBell />
-            <span className="h-8 w-px bg-[#c4c9dc]" />
+            <span className="h-8 w-px bg-[#c4c9dc] dark:bg-slate-700" />
             <div className="hidden text-right text-sm sm:block">
-              <div className="font-bold text-slate-950">{displayName}</div>
-              <div className="text-xs uppercase tracking-wide text-slate-600">{displayRole}</div>
+              <div className="font-bold text-slate-950 dark:text-slate-100">{displayName}</div>
+              <div className="text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400">{displayRole}</div>
             </div>
             <Avatar name={displayName} className="h-10 w-10" />
           </div>
@@ -251,10 +257,10 @@ export function DashboardShell({
 
 export function Footer() {
   return (
-    <footer className="border-t border-[#c4c9dc] bg-[#dfe3ef] px-5 py-7 lg:px-9">
-      <div className="mx-auto flex max-w-[1260px] flex-col gap-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
+    <footer className="border-t border-[#c4c9dc] bg-[#dfe3ef] px-5 py-7 lg:px-9 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mx-auto flex max-w-[1260px] flex-col gap-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between dark:text-slate-400">
         <div>
-          <div className="text-xl font-black text-[#004bd1]">CortexMed</div>
+          <div className="text-xl font-black text-[#004bd1] dark:text-[#5b9bff]">CortexMed</div>
           <div>© {new Date().getFullYear()} CortexMed AI Hospital Systems. All rights reserved.</div>
         </div>
         <div className="flex flex-wrap gap-6">
@@ -280,8 +286,8 @@ export function PageTitle({
   return (
     <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-4xl font-black tracking-normal text-slate-950">{title}</h1>
-        {subtitle && <p className="mt-2 text-lg text-slate-700">{subtitle}</p>}
+        <h1 className="text-4xl font-black tracking-normal text-slate-950 dark:text-slate-100">{title}</h1>
+        {subtitle && <p className="mt-2 text-lg text-slate-700 dark:text-slate-400">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
     </div>
@@ -301,7 +307,7 @@ export function Button({
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className">) {
   const styles = {
     primary: "bg-[#0755d9] text-white border-[#0755d9]",
-    secondary: "bg-white text-slate-950 border-[#c4c9dc]",
+    secondary: "bg-white text-slate-950 border-[#c4c9dc] dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600",
     danger: "bg-[#c91414] text-white border-[#c91414]",
   };
   return (
@@ -325,12 +331,12 @@ export function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className={`rounded-xl border border-[#c4c9dc] bg-white shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-[#c4c9dc] bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 ${className}`}>
       {(title || subtitle || action) && (
-        <div className="flex items-start justify-between gap-4 border-b border-[#d7dbea] px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-[#d7dbea] px-6 py-5 dark:border-slate-700">
           <div>
-            {title && <h2 className="text-2xl font-black">{title}</h2>}
-            {subtitle && <p className="mt-1 text-sm text-slate-700">{subtitle}</p>}
+            {title && <h2 className="text-2xl font-black dark:text-slate-100">{title}</h2>}
+            {subtitle && <p className="mt-1 text-sm text-slate-700 dark:text-slate-400">{subtitle}</p>}
           </div>
           {action}
         </div>
@@ -342,7 +348,7 @@ export function Panel({
 
 export function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-xl border-2 border-dashed border-[#c4c9dc] p-9 text-center italic text-slate-500">
+    <div className="rounded-xl border-2 border-dashed border-[#c4c9dc] p-9 text-center italic text-slate-500 dark:border-slate-700 dark:text-slate-400">
       {label}
     </div>
   );
@@ -370,7 +376,7 @@ export function MetricCard({
   };
 
   return (
-    <div className="rounded-xl border border-[#c4c9dc] bg-white p-6 shadow-sm">
+    <div className="rounded-xl border border-[#c4c9dc] bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-start justify-between">
         <span className={`grid h-12 w-12 place-items-center rounded-lg text-lg font-black ${tones[tone]}`}>
           {icon}
@@ -381,8 +387,8 @@ export function MetricCard({
           </span>
         )}
       </div>
-      <div className="mt-5 text-base text-slate-800">{label}</div>
-      <div className="mt-1 text-3xl font-black">{value}</div>
+      <div className="mt-5 text-base text-slate-800 dark:text-slate-300">{label}</div>
+      <div className="mt-1 text-3xl font-black dark:text-slate-100">{value}</div>
     </div>
   );
 }
@@ -412,7 +418,7 @@ export function Progress({ value, tone = "blue" }: { value: number; tone?: "blue
     orange: "bg-orange-700",
   };
   return (
-    <div className="h-2 rounded-full bg-[#e7e9f5]">
+    <div className="h-2 rounded-full bg-[#e7e9f5] dark:bg-slate-700">
       <div className={`h-full rounded-full ${colors[tone]}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
@@ -421,7 +427,7 @@ export function Progress({ value, tone = "blue" }: { value: number; tone?: "blue
 export function BarChart({ values, stacked = false }: { values?: number[]; stacked?: boolean }) {
   if (!values || values.length === 0) {
     return (
-      <div className="grid h-56 place-items-center rounded-lg border border-dashed border-[#c4c9dc] text-sm italic text-slate-500">
+      <div className="grid h-56 place-items-center rounded-lg border border-dashed border-[#c4c9dc] text-sm italic text-slate-500 dark:border-slate-700 dark:text-slate-400">
         No data available yet
       </div>
     );
