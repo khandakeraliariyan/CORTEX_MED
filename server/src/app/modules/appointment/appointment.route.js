@@ -10,7 +10,7 @@ const auth = require("../../middlewares/auth");
 
 const { createAppointmentValidation, } = require("./appointment.validation");
 
-router.get("/", auth("admin", "receptionist"), AppointmentController.listAppointments);
+router.get("/", auth("admin", "receptionist", "doctor"), AppointmentController.listAppointments);
 
 router.get("/track/:code", AppointmentController.trackAppointment);
 

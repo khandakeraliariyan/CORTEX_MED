@@ -1677,6 +1677,100 @@ export function DoctorEmergencyIntakePage() {
   );
 }
 
+export function DoctorHistoryPage() {
+  const user = useAuthStore((state) => state.user);
+  const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+
+  const completed = appointments.filter((a) => a.status === "completed").length;
+  const cancelled = appointments.filter((a) => a.status === "cancelled").length;
+
+  return (
+    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID...">
+      <PageTitle title="Consultation History" subtitle="Every appointment you have handled, most recent first." />
+      <div className="grid gap-6 md:grid-cols-3">
+        <MetricCard icon="P" label="Total Appointments" value={String(appointments.length)} />
+        <MetricCard icon="O" label="Completed" value={String(completed)} tone="green" />
+        <MetricCard icon="X" label="Cancelled" value={String(cancelled)} tone="red" />
+      </div>
+      {isLoading ? (
+        <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading history..." /></div>
+      ) : (
+        <div className="mt-7">
+          <AppointmentTable appointments={appointments} />
+        </div>
+      )}
+    </DashboardShell>
+  );
+}
+
+interface PatientSummary {
+  key: string;
+  name: string;
+  phone: string;
+  age: number;
+  gender: Appointment["gender"];
+  visits: number;
+  lastVisitAt: string;
+  lastStatus: Appointment["status"];
+}
+
+function summarizePatients(appointments: Appointment[]): PatientSummary[] {
+  const byPatient = new Map<string, PatientSummary>();
+
+  [...appointments]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .forEach((appointment) => {
+      const key = appointment.phone || appointment.patientName;
+      byPatient.set(key, {
+        key,
+        name: appointment.patientName,
+        phone: appointment.phone,
+        age: appointment.age,
+        gender: appointment.gender,
+        visits: (byPatient.get(key)?.visits ?? 0) + 1,
+        lastVisitAt: appointment.createdAt,
+        lastStatus: appointment.status,
+      });
+    });
+
+  return Array.from(byPatient.values()).sort(
+    (a, b) => new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime()
+  );
+}
+
+export function DoctorPatientsPage() {
+  const user = useAuthStore((state) => state.user);
+  const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+  const patients = summarizePatients(appointments);
+
+  return (
+    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID...">
+      <PageTitle title="My Patients" subtitle="Everyone you have treated, with their visit history." />
+      <div className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+        <div className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
+          <span>Patient</span><span>Phone</span><span>Age</span><span>Visits</span><span>Last Visit</span><span>Last Status</span>
+        </div>
+        {isLoading ? (
+          <div className="p-6"><EmptyState label="Loading patients..." /></div>
+        ) : patients.length === 0 ? (
+          <div className="p-6"><EmptyState label="No patients treated yet." /></div>
+        ) : (
+          patients.map((patient) => (
+            <div key={patient.key} className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] items-center border-t border-[#d7dbea] px-6 py-5">
+              <div className="flex items-center gap-4"><Avatar name={patient.name} className="h-11 w-11" /><b>{patient.name}</b></div>
+              <span>{patient.phone}</span>
+              <span>{patient.age}</span>
+              <span>{patient.visits}</span>
+              <span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(patient.lastVisitAt))}</span>
+              <AppointmentStatus status={patient.lastStatus} />
+            </div>
+          ))
+        )}
+      </div>
+    </DashboardShell>
+  );
+}
+
 export function PatientQueueTrackingPage() {
   const [code, setCode] = useState("");
   const [submittedCode, setSubmittedCode] = useState<string | null>(null);

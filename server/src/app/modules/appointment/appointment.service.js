@@ -52,8 +52,10 @@ const createAppointment = async (payload) => {
     return updatedAppointment;
 };
 
-const listAppointments = async () => {
-    return await Appointment.find()
+const listAppointments = async (doctorId) => {
+    const filter = doctorId ? { doctor: doctorId } : {};
+
+    return await Appointment.find(filter)
         .sort({ createdAt: -1 })
         .populate({
             path: "doctor",
