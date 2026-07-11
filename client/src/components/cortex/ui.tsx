@@ -2,9 +2,67 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useAuthStore } from "@/store/auth-store";
+import { useNotificationsStore } from "@/store/notifications-store";
 import { ROUTES } from "@/constants/routes";
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+export function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const notifications = useNotificationsStore((state) => state.notifications);
+  const markAllRead = useNotificationsStore((state) => state.markAllRead);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  return (
+    <div className="relative">
+      <button
+        aria-label="Notifications"
+        onClick={() => {
+          setOpen((v) => !v);
+          if (!open) markAllRead();
+        }}
+        className="relative"
+      >
+        ♙
+        {unreadCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-30 mt-3 w-80 rounded-xl border border-[#c4c9dc] bg-white text-left text-sm shadow-lg">
+            <div className="border-b border-[#d7dbea] px-4 py-3 font-black">Notifications</div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="px-4 py-6 text-center text-slate-500">No notifications yet.</p>
+              ) : (
+                notifications.map((notification) => (
+                  <div key={notification.id} className="border-b border-[#eef0fb] px-4 py-3">
+                    <p className="text-slate-800">{notification.message}</p>
+                    <span className="text-xs text-slate-500">{timeAgo(notification.createdAt)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 type NavItem = {
   label: string;
@@ -35,13 +93,6 @@ const receptionNav: NavItem[] = [
   { label: "Queue", href: "/reception/queue", icon: "◉" },
   { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
   { label: "Settings", href: "#", icon: "⚙" },
-];
-
-const patientNav: NavItem[] = [
-  { label: "Dashboard", href: "/patient/dashboard", icon: "[]" },
-  { label: "Queue", href: "/patient/queue", icon: "::" },
-  { label: "Appointments", href: "/patient/appointments", icon: "##" },
-  { label: "Profile", href: "/patient/profile", icon: "@" },
 ];
 
 export function AppLogo({ compact = false }: { compact?: boolean }) {
@@ -82,11 +133,10 @@ export function Avatar({ name, className = "" }: { name?: string; className?: st
   );
 }
 
-export type DashboardRole = "admin" | "doctor" | "receptionist" | "patient";
+export type DashboardRole = "admin" | "doctor" | "receptionist";
 
 function sidebarNavFor(role: DashboardRole) {
   if (role === "doctor") return doctorNav;
-  if (role === "patient") return patientNav;
   if (role === "receptionist") return receptionNav;
   return adminNav;
 }
@@ -95,7 +145,6 @@ const roleLabel: Record<DashboardRole, string> = {
   admin: "Administrator",
   doctor: "Doctor",
   receptionist: "Front Desk",
-  patient: "Patient",
 };
 
 export function DashboardShell({
@@ -148,7 +197,7 @@ export function DashboardShell({
         </nav>
         <div className="p-4">
           <div className="mb-4 border-t border-[#c4c9dc]" />
-          {role !== "doctor" && role !== "patient" && (
+          {role !== "doctor" && (
             <Link
               href="/reception/dashboard#book-appointment"
               className="mb-5 flex h-14 items-center justify-center gap-3 rounded-lg bg-[#0755d9] px-5 text-base font-bold text-white shadow-sm"
@@ -181,9 +230,7 @@ export function DashboardShell({
             />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl text-slate-900">
-            <button aria-label="Notifications">♙</button>
-            <button aria-label="Messages">▣</button>
-            <button aria-label="Calendar">▤</button>
+            <NotificationBell />
             <span className="h-8 w-px bg-[#c4c9dc]" />
             <div className="hidden text-right text-sm sm:block">
               <div className="font-bold text-slate-950">{displayName}</div>
@@ -392,20 +439,65 @@ export function BarChart({ values, stacked = false }: { values?: number[]; stack
   );
 }
 
-export function HeatMap({ rows = 7, columns = 12 }: { rows?: number; columns?: number }) {
-  return (
-    <div className="space-y-2">
+const HEATMAP_RAMP = ["#eef0fb", "#8fb0ee", "#6f95e8", "#3f6cd6", "#0b3fa8"];
+
+function heatCellColor(value: number, max: number): string {
+  if (value <= 0 || max <= 0) return HEATMAP_RAMP[0];
+  const step = Math.min(3, Math.ceil((value / max) * 4) - 1);
+  return HEATMAP_RAMP[1 + Math.max(0, step)];
+}
+
+export function HeatMap({
+  rowLabels,
+  columnLabels,
+  data,
+}: {
+  rowLabels?: string[];
+  columnLabels?: string[];
+  data?: number[][];
+}) {
+  if (!data || data.length === 0 || data.every((row) => row.every((value) => value === 0))) {
+    const rows = rowLabels?.length ?? 7;
+    const columns = columnLabels?.length ?? 12;
+    return (
       <div className="space-y-2">
         {Array.from({ length: rows }).map((_, row) => (
           <div key={row} className="grid gap-1" style={{ gridTemplateColumns: `36px repeat(${columns}, minmax(0, 1fr))` }}>
-            <span className="text-sm text-slate-400">--</span>
+            <span className="text-sm text-slate-400">{rowLabels?.[row] ?? "--"}</span>
             {Array.from({ length: columns }).map((_, index) => (
-              <span key={`${row}-${index}`} className="h-7 rounded bg-[#eef0fb]" />
+              <span key={`${row}-${index}`} className="h-7 rounded border border-[#d7dbea] bg-[#eef0fb]" />
             ))}
           </div>
         ))}
+        <p className="pt-2 text-center text-sm italic text-slate-500">No activity data available yet</p>
       </div>
-      <p className="pt-2 text-center text-sm italic text-slate-500">No activity data available yet</p>
+    );
+  }
+
+  const max = Math.max(...data.flat(), 1);
+
+  return (
+    <div className="space-y-2">
+      {data.map((row, rowIndex) => (
+        <div key={rowIndex} className="grid gap-1" style={{ gridTemplateColumns: `36px repeat(${row.length}, minmax(0, 1fr))` }}>
+          <span className="text-sm text-slate-500">{rowLabels?.[rowIndex] ?? rowIndex}</span>
+          {row.map((value, colIndex) => (
+            <span
+              key={`${rowIndex}-${colIndex}`}
+              title={`${columnLabels?.[colIndex] ?? colIndex}: ${value} appointment${value === 1 ? "" : "s"}`}
+              className="h-7 rounded border border-[#d7dbea]"
+              style={{ backgroundColor: heatCellColor(value, max) }}
+            />
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center justify-end gap-2 pt-2 text-xs text-slate-500">
+        <span>Fewer</span>
+        {HEATMAP_RAMP.map((color) => (
+          <span key={color} className="h-3 w-5 rounded-sm border border-[#d7dbea]" style={{ backgroundColor: color }} />
+        ))}
+        <span>More</span>
+      </div>
     </div>
   );
 }

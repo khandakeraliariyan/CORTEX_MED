@@ -6,9 +6,10 @@ import type {
   TrackAppointmentResult,
 } from "@/features/appointment/types/appointment.types";
 
-export async function listAppointments(): Promise<Appointment[]> {
+export async function listAppointments(doctorId?: string): Promise<Appointment[]> {
   const { data } = await apiClient.get<ApiResponse<Appointment[]>>(
-    "/appointments"
+    "/appointments",
+    { params: doctorId ? { doctor: doctorId } : undefined }
   );
   return data.data;
 }

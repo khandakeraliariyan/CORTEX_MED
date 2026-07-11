@@ -16,16 +16,23 @@ import {
   Footer,
   HeatMap,
   MetricCard,
+  NotificationBell,
   PageTitle,
   Panel,
   Progress,
   StatusPill,
 } from "@/components/cortex/ui";
 import { login, register } from "@/services/auth-service";
+import { useChangePassword } from "@/features/authentication/hooks/use-change-password";
 import { useAuthStore } from "@/store/auth-store";
 import { ROLE_DASHBOARD_PATH, ROUTES } from "@/constants/routes";
 import type { SelfRegisterableRole } from "@/types/auth.types";
-import { useCreateDoctor, useDoctors } from "@/features/doctor/hooks/use-doctors";
+import {
+  useCreateDoctor,
+  useDeleteDoctor,
+  useDoctors,
+  useUpdateDoctor,
+} from "@/features/doctor/hooks/use-doctors";
 import type { Doctor } from "@/features/doctor/types/doctor.types";
 import {
   useAppointments,
@@ -38,6 +45,16 @@ import {
   useCompletePatient,
   useQueue,
 } from "@/features/queue/hooks/use-queue";
+import { useHospitalAnalytics } from "@/features/analytics/hooks/use-hospital-analytics";
+import type { DoctorPerformanceRow } from "@/features/analytics/types/analytics.types";
+
+function normalizeToHeights(counts: number[]): number[] {
+  const max = Math.max(...counts, 1);
+  return counts.map((count) => Math.max(8, Math.round((count / max) * 100)));
+}
+
+const HOUR_BUCKET_LABELS = ["00", "02", "04", "06", "08", "10", "12", "14", "16", "18", "20", "22"];
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function getErrorMessage(error: unknown): string {
   if (isAxiosError(error)) {
@@ -148,7 +165,7 @@ export function LandingPage() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <Link href="/reception/appointments" className="rounded-xl bg-[#0755d9] px-8 py-4 text-sm font-bold text-white shadow-md shadow-blue-200">Book Appointment</Link>
-              <Link href="/track/demo" className="rounded-xl border border-[#c5cadf] bg-white px-8 py-4 text-sm font-bold">Track Queue</Link>
+              <Link href="/track" className="rounded-xl border border-[#c5cadf] bg-white px-8 py-4 text-sm font-bold">Track Queue</Link>
               <Link href="/login" className="px-4 py-4 text-sm font-bold text-[#0755d9]">Staff Login</Link>
             </div>
           </div>
@@ -312,7 +329,6 @@ export function LoginPage() {
               </label>
               <div className="flex justify-between text-slate-700">
                 <label className="flex items-center gap-3"><input type="checkbox" /> Remember device</label>
-                <Link href="/forgot-password" className="font-bold text-[#0755d9]">Forgot credentials?</Link>
               </div>
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
               <Button type="submit" disabled={loading} className="h-16 w-full text-xl disabled:opacity-60">
@@ -487,17 +503,32 @@ export function RegisterPage() {
   );
 }
 
+function departmentUtilization(appointments: Appointment[]): Array<{ department: string; waiting: number; percent: number }> {
+  const waiting = appointments.filter((a) => a.status === "waiting");
+  const counts = new Map<string, number>();
+  waiting.forEach((a) => {
+    const department = a.doctor?.department ?? "Unassigned";
+    counts.set(department, (counts.get(department) ?? 0) + 1);
+  });
+  const total = waiting.length || 1;
+  return Array.from(counts.entries())
+    .map(([department, count]) => ({ department, waiting: count, percent: Math.round((count / total) * 100) }))
+    .sort((a, b) => b.waiting - a.waiting)
+    .slice(0, 4);
+}
+
 export function AdminDashboardPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
+  const analytics = useHospitalAnalytics(appointments, doctors);
 
   const waitingCount = appointments.filter((a) => a.status === "waiting").length;
   const criticalCount = appointments.filter((a) => a.priority <= 2 && a.status === "waiting").length;
-  const avgWait = waitingCount
-    ? Math.round(
-        appointments.filter((a) => a.status === "waiting").reduce((sum, a) => sum + a.estimatedWait, 0) / waitingCount
-      )
-    : 0;
+  const utilization = departmentUtilization(appointments);
+  const recentAppointments = [...appointments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+  const onDuty = doctors.filter((d) => d.status === "available").slice(0, 4);
 
   return (
     <DashboardShell role="admin" active="Dashboard">
@@ -509,17 +540,21 @@ export function AdminDashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon="+" label="Total Doctors" value={String(doctors.length)} />
         <MetricCard icon="O" label="Appointments Today" value={String(appointments.length)} tone="green" />
-        <MetricCard icon="!" label="Average Wait" value={waitingCount ? `${avgWait}m` : "--"} tone="orange" />
+        <MetricCard icon="!" label="Average Wait" value={waitingCount ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
         <MetricCard icon="!" label="Critical Cases" value={String(criticalCount)} tone="red" />
       </div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Queue Length Trend" subtitle="Live occupancy and waiting line volume"><BarChart /></Panel>
-        <Panel title="Hospital Utilization" subtitle="Departmental capacity usage">
+        <Panel title="Queue Length Trend" subtitle="Appointments booked today, by hour"><BarChart values={normalizeToHeights(analytics.hourlyVolume)} /></Panel>
+        <Panel title="Hospital Utilization" subtitle="Share of waiting queue by department">
           <div className="space-y-5">
-            {["Emergency Ward", "Outpatient (OPD)", "Imaging & Lab", "Pediatrics"].map((label) => (
-              <div key={label}><div className="mb-2 flex justify-between"><span>{label}</span><b>--</b></div><Progress value={0} /></div>
-            ))}
-            <Button variant="secondary" className="w-full">View Department Details</Button>
+            {utilization.length === 0 ? (
+              <EmptyState label="No patients waiting." />
+            ) : (
+              utilization.map(({ department, waiting, percent }) => (
+                <div key={department}><div className="mb-2 flex justify-between"><span>{department}</span><b>{waiting} waiting</b></div><Progress value={percent} /></div>
+              ))
+            )}
+            <Link href="/reception/appointments"><Button variant="secondary" className="w-full">View Department Details</Button></Link>
           </div>
         </Panel>
       </div>
@@ -528,11 +563,36 @@ export function AdminDashboardPage() {
           <DoctorTable doctors={doctors} />
         </Panel>
         <Panel title="Recent Activity">
-          <EmptyState label="No recent activity." />
+          {recentAppointments.length === 0 ? (
+            <EmptyState label="No recent activity." />
+          ) : (
+            <div className="space-y-5">
+              {recentAppointments.map((appointment) => (
+                <div key={appointment._id} className="flex gap-4">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${appointment.status === "completed" ? "bg-emerald-100 text-emerald-700" : appointment.status === "serving" ? "bg-blue-100 text-[#0755d9]" : "bg-orange-100 text-orange-700"}`}>✓</span>
+                  <div>
+                    <b>{appointment.status === "completed" ? `Completed: ${appointment.patientName}` : appointment.status === "serving" ? `In consultation: ${appointment.patientName}` : `Check-in: ${appointment.patientName}`}</b>
+                    <p className="text-sm text-slate-700">Token #{appointment.tokenNumber} - {appointment.doctor?.user?.name ?? "Unassigned"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Panel>
       </div>
-      <Panel title="Reception & Support" className="mt-6">
-        <EmptyState label="No reception staff on shift yet." />
+      <Panel title="Doctors on Duty" className="mt-6">
+        {onDuty.length === 0 ? (
+          <EmptyState label="No doctors currently available." />
+        ) : (
+          <div className="grid gap-6 md:grid-cols-4">
+            {onDuty.map((doctor) => (
+              <div key={doctor._id} className="flex items-center gap-4 rounded-xl border border-[#d7dbea] p-4">
+                <Avatar name={doctor.user.name} className="h-12 w-12" />
+                <div><b>{doctor.user.name}</b><p className="text-sm text-slate-600">{doctor.department}</p></div>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
     </DashboardShell>
   );
@@ -834,11 +894,87 @@ function DepartmentOverview({ appointments }: { appointments: Appointment[] }) {
   );
 }
 
+function DoctorEditForm({
+  doctor,
+  onDone,
+}: {
+  doctor: Doctor;
+  onDone: () => void;
+}) {
+  const updateDoctor = useUpdateDoctor();
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    department: doctor.department,
+    specialty: doctor.specialty,
+    room: doctor.room,
+    consultationFee: String(doctor.consultationFee),
+    avgConsultationTime: String(doctor.avgConsultationTime),
+    startTime: doctor.startTime,
+    endTime: doctor.endTime,
+    status: doctor.status,
+  });
+
+  const updateField = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await updateDoctor.mutateAsync({
+        id: doctor._id,
+        payload: {
+          department: form.department,
+          specialty: form.specialty,
+          room: form.room,
+          consultationFee: Number(form.consultationFee),
+          avgConsultationTime: Number(form.avgConsultationTime),
+          startTime: form.startTime,
+          endTime: form.endTime,
+          status: form.status as Doctor["status"],
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 p-7">
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block text-sm"><span className="font-bold">Department</span><input required value={form.department} onChange={updateField("department")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Specialty</span><input required value={form.specialty} onChange={updateField("specialty")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Room</span><input required value={form.room} onChange={updateField("room")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Status</span>
+          <select value={form.status} onChange={updateField("status")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3">
+            <option value="available">Available</option>
+            <option value="unavailable">Unavailable</option>
+            <option value="on_leave">On Leave</option>
+          </select>
+        </label>
+        <label className="block text-sm"><span className="font-bold">Avg. Consultation (min)</span><input required type="number" min={5} value={form.avgConsultationTime} onChange={updateField("avgConsultationTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Consultation Fee</span><input required type="number" min={0} value={form.consultationFee} onChange={updateField("consultationFee")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">Start Time</span><input required value={form.startTime} onChange={updateField("startTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+        <label className="block text-sm"><span className="font-bold">End Time</span><input required value={form.endTime} onChange={updateField("endTime")} className="mt-1 h-10 w-full rounded-lg border border-[#c4c9dc] px-3" /></label>
+      </div>
+      {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+      <div className="flex justify-end gap-3">
+        <Button type="button" variant="secondary" onClick={onDone}>Cancel</Button>
+        <Button type="submit" disabled={updateDoctor.isPending} className="disabled:opacity-60">{updateDoctor.isPending ? "Saving..." : "Save Changes"}</Button>
+      </div>
+    </form>
+  );
+}
+
 export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "receptionist" }) {
   const { data: doctors = [], isLoading } = useDoctors();
   const createDoctor = useCreateDoctor();
+  const deleteDoctor = useDeleteDoctor();
   const canManageDoctors = role === "admin";
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -924,18 +1060,47 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
           <div className="grid gap-7 xl:grid-cols-3">
             {doctors.map((doctor) => (
               <div key={doctor._id} className="overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
-                <div className="relative h-48 bg-gradient-to-br from-sky-200 via-slate-100 to-blue-200">
-                  <StatusPill tone={doctor.status === "available" ? "green" : doctor.status === "on_leave" ? "orange" : "slate"}>{doctor.status.replace("_", " ")}</StatusPill>
-                </div>
-                <div className="p-7">
-                  <div className="flex justify-between"><h2 className="text-2xl font-black">{doctor.user.name}</h2><span className="rounded-lg bg-[#e8e9f5] px-4 py-2 font-bold">{doctor.room}</span></div>
-                  <p className="mt-2 font-bold text-[#0755d9]">{doctor.department} - {doctor.specialty}</p>
-                  <div className="mt-6 grid grid-cols-2 border-t border-[#d7dbea] pt-5"><div><b className="text-slate-500">WORKING HOURS</b><p>{doctor.startTime} - {doctor.endTime}</p></div><div><b className="text-slate-500">AVG. CONSULT</b><p>{doctor.avgConsultationTime} mins</p></div></div>
-                  <div className="mt-7 flex gap-4">
-                    <Button variant="secondary">Profile</Button>
-                    {canManageDoctors && <><Button variant="secondary">Edit</Button><Button variant="secondary">Del</Button></>}
-                  </div>
-                </div>
+                {editingId === doctor._id ? (
+                  <DoctorEditForm doctor={doctor} onDone={() => setEditingId(null)} />
+                ) : (
+                  <>
+                    <div className="relative h-48 bg-gradient-to-br from-sky-200 via-slate-100 to-blue-200">
+                      <StatusPill tone={doctor.status === "available" ? "green" : doctor.status === "on_leave" ? "orange" : "slate"}>{doctor.status.replace("_", " ")}</StatusPill>
+                    </div>
+                    <div className="p-7">
+                      <div className="flex justify-between"><h2 className="text-2xl font-black">{doctor.user.name}</h2><span className="rounded-lg bg-[#e8e9f5] px-4 py-2 font-bold">{doctor.room}</span></div>
+                      <p className="mt-2 font-bold text-[#0755d9]">{doctor.department} - {doctor.specialty}</p>
+                      <div className="mt-6 grid grid-cols-2 border-t border-[#d7dbea] pt-5"><div><b className="text-slate-500">WORKING HOURS</b><p>{doctor.startTime} - {doctor.endTime}</p></div><div><b className="text-slate-500">AVG. CONSULT</b><p>{doctor.avgConsultationTime} mins</p></div></div>
+                      {deleteError && deleteDoctor.variables === doctor._id && (
+                        <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{deleteError}</p>
+                      )}
+                      <div className="mt-7 flex gap-4">
+                        <Button variant="secondary">Profile</Button>
+                        {canManageDoctors && (
+                          <>
+                            <Button variant="secondary" onClick={() => setEditingId(doctor._id)}>Edit</Button>
+                            <Button
+                              variant="secondary"
+                              disabled={deleteDoctor.isPending}
+                              onClick={async () => {
+                                if (!window.confirm(`Remove ${doctor.user.name} from the staff directory?`)) return;
+                                setDeleteError(null);
+                                try {
+                                  await deleteDoctor.mutateAsync(doctor._id);
+                                } catch (err) {
+                                  setDeleteError(getErrorMessage(err));
+                                }
+                              }}
+                              className="disabled:opacity-60"
+                            >
+                              Del
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -945,25 +1110,45 @@ export function StaffDirectoryPage({ role = "admin" }: { role?: "admin" | "recep
   );
 }
 
+function SpecialistPerformanceTable({ rows }: { rows: DoctorPerformanceRow[] }) {
+  if (rows.length === 0) {
+    return <EmptyState label="No practitioners on record yet." />;
+  }
+  return (
+    <div className="-m-6 overflow-hidden">
+      <div className="grid grid-cols-3 bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
+        <span>Practitioner</span><span>Department</span><span className="text-right">Patients Seen</span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.doctorId} className="grid grid-cols-3 items-center border-t border-[#d7dbea] px-6 py-5">
+          <div className="flex items-center gap-3"><Avatar name={row.name} className="h-11 w-11" /><b>{row.name}</b></div>
+          <span>{row.department}</span>
+          <b className="text-right">{row.patientsSeen}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AnalyticsPage() {
   const { data: doctors = [] } = useDoctors();
   const { data: appointments = [] } = useAppointments();
+  const analytics = useHospitalAnalytics(appointments, doctors);
 
-  const critical = appointments.filter((a) => a.priority <= 2).length;
-  const highPriority = appointments.filter((a) => a.priority === 3).length;
-  const routine = appointments.length - critical - highPriority;
+  const waiting = appointments.filter((a) => a.status === "waiting");
+  const { critical, high: highPriority, routine } = analytics.priorityBreakdown;
 
   return (
     <DashboardShell role="admin" active="Analytics" searchPlaceholder="Search analytics...">
       <PageTitle title="Hospital Analytics" subtitle="System performance and patient flow metrics." actions={<><Button variant="secondary">Filter Range</Button><Button>Export Report</Button></>} />
       <div className="grid gap-6 md:grid-cols-4">
         <MetricCard icon="P" label="Daily Patients" value={String(appointments.length)} tone="blue" />
-        <MetricCard icon="O" label="Avg Wait Time" value="--" tone="orange" />
-        <MetricCard icon="B" label="Bed Occupancy" value="--" tone="green" />
-        <MetricCard icon="Z" label="ER Efficiency" value="--" tone="blue" />
+        <MetricCard icon="O" label="Avg Wait Time" value={waiting.length ? `${analytics.avgWaitMinutes}m` : "--"} tone="orange" />
+        <MetricCard icon="B" label="Doctor Availability" value={doctors.length ? `${analytics.doctorAvailabilityPercent}%` : "--"} tone="green" />
+        <MetricCard icon="Z" label="ER Efficiency" value={`${analytics.erEfficiencyPercent}%`} tone="blue" />
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel title="Average Wait Time Trend" subtitle="Real-time monitoring across departments"><BarChart /></Panel>
+        <Panel title="Average Wait Time Trend" subtitle="Actual check-in to consult time, by hour"><BarChart values={normalizeToHeights(analytics.waitTimeTrend)} /></Panel>
         <Panel title="Priority Distribution" subtitle="Critical vs Non-emergency cases">
           <Donut total={String(appointments.length)} />
           <div className="mt-8 space-y-4">
@@ -974,8 +1159,12 @@ export function AnalyticsPage() {
         </Panel>
       </div>
       <div className="mt-7 grid gap-6 xl:grid-cols-2">
-        <Panel title="Queue Utilization" subtitle="Wait density by hour and department"><HeatMap /></Panel>
-        <Panel title="Specialist Performance" subtitle="Patient satisfaction and turnover rates"><DoctorTable doctors={doctors} /></Panel>
+        <Panel title="Queue Utilization" subtitle="Booking density by weekday and hour">
+          <HeatMap data={analytics.weeklyHeatmap} rowLabels={WEEKDAY_LABELS} columnLabels={HOUR_BUCKET_LABELS} />
+        </Panel>
+        <Panel title="Specialist Performance" subtitle="Patients seen per practitioner">
+          <SpecialistPerformanceTable rows={analytics.doctorPerformance} />
+        </Panel>
       </div>
     </DashboardShell>
   );
@@ -996,7 +1185,7 @@ export function ReceptionDashboardPage() {
 
   const [form, setForm] = useState({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
 
   const resetForm = () => setForm({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
 
@@ -1013,7 +1202,7 @@ export function ReceptionDashboardPage() {
         doctor: form.doctor,
         symptoms: form.symptoms,
       });
-      setSuccess(`Booked - token #${appointment.tokenNumber}, code ${appointment.appointmentCode}`);
+      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1055,7 +1244,12 @@ export function ReceptionDashboardPage() {
             </label>
             <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-32 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the patient's condition..." /></label>
             {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
-            {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+            {success && (
+              <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                Booked - token #{success.tokenNumber}, code {success.code}.{" "}
+                <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
+              </p>
+            )}
             <div className="md:col-span-2 flex justify-end gap-4">
               <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
               <Button type="submit" disabled={createAppointment.isPending} className="disabled:opacity-60">{createAppointment.isPending ? "Booking..." : "Book Patient Entry"}</Button>
@@ -1123,7 +1317,8 @@ function FrontDeskDashboardShell({ children, userName }: { children: ReactNode; 
             <input className="h-10 w-full rounded-full border border-[#c4c9dc] bg-[#f0f1fb] pl-11 pr-4 outline-none" placeholder="Search medical records..." />
           </div>
           <div className="ml-auto flex items-center gap-5 text-xl">
-            <span>♙</span><span>▣</span><span>□</span><span className="h-8 w-px bg-[#c4c9dc]" />
+            <NotificationBell />
+            <span className="h-8 w-px bg-[#c4c9dc]" />
             <div className="hidden text-right text-sm sm:block"><b>{userName}</b><div>Front Desk Officer</div></div>
             <Avatar name={userName} className="h-10 w-10" />
           </div>
@@ -1363,12 +1558,16 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
   const doctorId = user?.doctorId ?? null;
 
   const { data: queue } = useQueue(doctorId);
+  const { data: doctorAppointments = [] } = useAppointments(doctorId ?? undefined);
   const callNext = useCallNextPatient(doctorId);
   const completePatient = useCompletePatient(doctorId);
 
   const current = queue?.current ?? null;
   const waiting = queue?.waiting ?? [];
   const stats = queue?.stats;
+  const recentActivity = [...doctorAppointments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
 
   return (
     <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID...">
@@ -1418,7 +1617,23 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
         <Panel title="Patient Queue" action={<Button variant="secondary" disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">Call Next Patient</Button>}>
           {waiting.length === 0 ? <EmptyState label="No patients waiting." /> : <div className="space-y-4">{waiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>}
         </Panel>
-        <Panel title="Timeline"><EmptyState label="No recent activity." /></Panel>
+        <Panel title="Timeline">
+          {recentActivity.length === 0 ? (
+            <EmptyState label="No recent activity." />
+          ) : (
+            <div className="space-y-5">
+              {recentActivity.map((appointment) => (
+                <div key={appointment._id} className="flex gap-4">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${appointment.status === "completed" ? "bg-emerald-100 text-emerald-700" : appointment.status === "serving" ? "bg-blue-100 text-[#0755d9]" : "bg-orange-100 text-orange-700"}`}>✓</span>
+                  <div>
+                    <b>{appointment.status === "completed" ? `Completed: ${appointment.patientName}` : appointment.status === "serving" ? `In consultation: ${appointment.patientName}` : `Check-in: ${appointment.patientName}`}</b>
+                    <p className="text-sm text-slate-700">Token #{appointment.tokenNumber} - {appointment.symptoms}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
       </div>
     </DashboardShell>
   );
@@ -1435,7 +1650,7 @@ export function DoctorEmergencyIntakePage() {
     symptoms: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
 
   const resetForm = () => {
     setForm({ patientName: "", age: "", gender: "male", phone: "", symptoms: "" });
@@ -1460,7 +1675,7 @@ export function DoctorEmergencyIntakePage() {
         doctor: user.doctorId,
         symptoms: form.symptoms,
       });
-      setSuccess(`Emergency intake booked - token #${appointment.tokenNumber}, code ${appointment.appointmentCode}`);
+      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1478,7 +1693,12 @@ export function DoctorEmergencyIntakePage() {
           <label className="block"><span className="font-bold">Phone Number</span><input required value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] px-4" /></label>
           <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-36 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the emergency condition..." /></label>
           {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
-          {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+          {success && (
+            <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+              Emergency intake booked - token #{success.tokenNumber}, code {success.code}.{" "}
+              <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
+            </p>
+          )}
           <div className="md:col-span-2 flex justify-end gap-4">
             <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
             <Button type="submit" disabled={createAppointment.isPending} className="disabled:opacity-60">{createAppointment.isPending ? "Booking..." : "Book Emergency Intake"}</Button>
@@ -1489,9 +1709,103 @@ export function DoctorEmergencyIntakePage() {
   );
 }
 
-export function PatientQueueTrackingPage() {
-  const [code, setCode] = useState("");
-  const [submittedCode, setSubmittedCode] = useState<string | null>(null);
+export function DoctorHistoryPage() {
+  const user = useAuthStore((state) => state.user);
+  const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+
+  const completed = appointments.filter((a) => a.status === "completed").length;
+  const cancelled = appointments.filter((a) => a.status === "cancelled").length;
+
+  return (
+    <DashboardShell role="doctor" active="History" searchPlaceholder="Search patient ID...">
+      <PageTitle title="Consultation History" subtitle="Every appointment you have handled, most recent first." />
+      <div className="grid gap-6 md:grid-cols-3">
+        <MetricCard icon="P" label="Total Appointments" value={String(appointments.length)} />
+        <MetricCard icon="O" label="Completed" value={String(completed)} tone="green" />
+        <MetricCard icon="X" label="Cancelled" value={String(cancelled)} tone="red" />
+      </div>
+      {isLoading ? (
+        <div className="mt-7 rounded-xl border border-[#c4c9dc] bg-white p-6"><EmptyState label="Loading history..." /></div>
+      ) : (
+        <div className="mt-7">
+          <AppointmentTable appointments={appointments} />
+        </div>
+      )}
+    </DashboardShell>
+  );
+}
+
+interface PatientSummary {
+  key: string;
+  name: string;
+  phone: string;
+  age: number;
+  gender: Appointment["gender"];
+  visits: number;
+  lastVisitAt: string;
+  lastStatus: Appointment["status"];
+}
+
+function summarizePatients(appointments: Appointment[]): PatientSummary[] {
+  const byPatient = new Map<string, PatientSummary>();
+
+  [...appointments]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .forEach((appointment) => {
+      const key = appointment.phone || appointment.patientName;
+      byPatient.set(key, {
+        key,
+        name: appointment.patientName,
+        phone: appointment.phone,
+        age: appointment.age,
+        gender: appointment.gender,
+        visits: (byPatient.get(key)?.visits ?? 0) + 1,
+        lastVisitAt: appointment.createdAt,
+        lastStatus: appointment.status,
+      });
+    });
+
+  return Array.from(byPatient.values()).sort(
+    (a, b) => new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime()
+  );
+}
+
+export function DoctorPatientsPage() {
+  const user = useAuthStore((state) => state.user);
+  const { data: appointments = [], isLoading } = useAppointments(user?.doctorId ?? undefined);
+  const patients = summarizePatients(appointments);
+
+  return (
+    <DashboardShell role="doctor" active="Patients" searchPlaceholder="Search patient ID...">
+      <PageTitle title="My Patients" subtitle="Everyone you have treated, with their visit history." />
+      <div className="mt-7 overflow-hidden rounded-xl border border-[#c4c9dc] bg-white shadow-sm">
+        <div className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] bg-[#f0f1fb] px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-700">
+          <span>Patient</span><span>Phone</span><span>Age</span><span>Visits</span><span>Last Visit</span><span>Last Status</span>
+        </div>
+        {isLoading ? (
+          <div className="p-6"><EmptyState label="Loading patients..." /></div>
+        ) : patients.length === 0 ? (
+          <div className="p-6"><EmptyState label="No patients treated yet." /></div>
+        ) : (
+          patients.map((patient) => (
+            <div key={patient.key} className="grid grid-cols-[1.4fr_1fr_.6fr_.8fr_1fr_1fr] items-center border-t border-[#d7dbea] px-6 py-5">
+              <div className="flex items-center gap-4"><Avatar name={patient.name} className="h-11 w-11" /><b>{patient.name}</b></div>
+              <span>{patient.phone}</span>
+              <span>{patient.age}</span>
+              <span>{patient.visits}</span>
+              <span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(patient.lastVisitAt))}</span>
+              <AppointmentStatus status={patient.lastStatus} />
+            </div>
+          ))
+        )}
+      </div>
+    </DashboardShell>
+  );
+}
+
+export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string } = {}) {
+  const [code, setCode] = useState(initialCode ?? "");
+  const [submittedCode, setSubmittedCode] = useState<string | null>(initialCode ?? null);
   const { data, isLoading, isError, error } = useTrackAppointment(submittedCode);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1507,8 +1821,7 @@ export function PatientQueueTrackingPage() {
       <header className="border-b border-[#c4c9dc]">
         <div className="mx-auto flex h-20 max-w-[1260px] items-center gap-10 px-6">
           <AppLogo compact />
-          <nav className="flex gap-10 text-xl"><Link href="/patient/dashboard">Dashboard</Link><Link href="/patient/queue" className="border-b-2 border-[#0755d9] pb-6 font-bold text-[#0755d9]">Queue</Link><Link href="/patient/appointments">Appointments</Link></nav>
-          <div className="ml-auto flex gap-5 text-[#0755d9]">! [] <Avatar className="h-10 w-10" /></div>
+          <span className="ml-auto text-lg font-bold text-[#0755d9]">Live Queue Tracking</span>
         </div>
       </header>
       <main className="mx-auto max-w-[1260px] px-6 py-8">
@@ -1560,6 +1873,43 @@ export function PatientQueueTrackingPage() {
   );
 }
 
+function SecurityPrivacyPanel() {
+  const changePassword = useChangePassword();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    try {
+      await changePassword.mutateAsync({ currentPassword, newPassword });
+      setSuccess("Password changed successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <Panel title="Security & Privacy">
+      <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+        <input required type="password" minLength={6} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Current password" />
+        <input required type="password" minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Enter new password" />
+        {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
+        {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" disabled={changePassword.isPending} className="disabled:opacity-60">{changePassword.isPending ? "Updating..." : "Update Password"}</Button>
+        </div>
+      </form>
+      <div className="mt-5 rounded-lg bg-[#f0f1fb] p-4">Two-Factor Authentication <Button variant="secondary" className="float-right h-9">Enable 2FA</Button></div>
+    </Panel>
+  );
+}
+
 export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
 
@@ -1575,7 +1925,7 @@ export function SettingsPage() {
           <Panel title="Theme & Appearance"><div className="grid gap-4 md:grid-cols-3">{["Light Mode", "Dark Mode", "Auto System"].map((mode) => <div key={mode} className="rounded-lg border border-[#c4c9dc] p-4"><div className="h-20 rounded bg-[#f0f1fb]" /><b className="mt-3 block">{mode}</b></div>)}</div></Panel>
           <Panel title="Notifications"><div className="space-y-5">{["Critical Patient Alerts", "Daily Summary Reports", "AI Diagnostic Suggestions"].map((item) => <div key={item} className="flex justify-between border-b border-[#d7dbea] pb-4"><span>{item}</span><span className="h-6 w-11 rounded-full bg-slate-300" /></div>)}</div></Panel>
           <Panel title="AI Intelligence Settings"><Progress value={0} /><div className="mt-6 grid gap-4 md:grid-cols-2"><div className="rounded-lg border border-[#c4c9dc] p-4">Copilot Mode</div><div className="rounded-lg border border-[#c4c9dc] p-4">Audit Mode</div></div></Panel>
-          <Panel title="Security & Privacy"><div className="grid gap-4 md:grid-cols-2"><input type="password" className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Current password" /><input type="password" className="h-12 rounded-lg border border-[#c4c9dc] px-4" placeholder="Enter new password" /></div><div className="mt-5 rounded-lg bg-[#f0f1fb] p-4">Two-Factor Authentication <Button variant="secondary" className="float-right h-9">Enable 2FA</Button></div></Panel>
+          <SecurityPrivacyPanel />
           <Panel className="border-red-200 bg-red-50"><div className="flex justify-between"><div><h2 className="text-xl font-black text-red-700">Danger Zone</h2><p>Deactivate hospital instance and archive clinical records.</p></div><Button variant="danger">Terminate System</Button></div></Panel>
           <div className="flex justify-end gap-4"><Button variant="secondary">Discard Changes</Button><Button>Save Settings</Button></div>
         </div>

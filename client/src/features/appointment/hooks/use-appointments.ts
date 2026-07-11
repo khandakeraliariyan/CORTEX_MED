@@ -8,10 +8,10 @@ import {
 } from "@/features/appointment/services/appointment-service";
 import type { CreateAppointmentPayload } from "@/features/appointment/types/appointment.types";
 
-export function useAppointments() {
+export function useAppointments(doctorId?: string) {
   return useQuery({
-    queryKey: ["appointments"],
-    queryFn: listAppointments,
+    queryKey: doctorId ? ["appointments", doctorId] : ["appointments"],
+    queryFn: () => listAppointments(doctorId),
   });
 }
 

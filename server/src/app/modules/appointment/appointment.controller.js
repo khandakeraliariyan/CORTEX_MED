@@ -31,7 +31,19 @@ const createAppointment = catchAsync(async (req, res) => {
 });
 
 const listAppointments = catchAsync(async (req, res) => {
-    const result = await AppointmentService.listAppointments();
+    let doctorId = req.query.doctor;
+
+    if (req.user?.role === "doctor") {
+        const doctorProfile = await Doctor.findOne({ user: req.user.id }).select("_id");
+
+        if (!doctorProfile) {
+            throw new AppError(404, "Doctor profile not found");
+        }
+
+        doctorId = doctorProfile._id;
+    }
+
+    const result = await AppointmentService.listAppointments(doctorId);
 
     sendResponse(res, {
         statusCode: 200,

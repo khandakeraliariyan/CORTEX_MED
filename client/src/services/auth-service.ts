@@ -2,6 +2,7 @@ import { apiClient } from "@/services/api-client";
 import type { ApiResponse } from "@/types/api.types";
 import type {
   AuthUser,
+  ChangePasswordPayload,
   LoginPayload,
   LoginResponse,
   RegisterPayload,
@@ -30,4 +31,10 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
 export async function getCurrentUser(): Promise<AuthUser> {
   const { data } = await apiClient.get<ApiResponse<AuthUser>>("/auth/me");
   return normalizeUser(data.data);
+}
+
+export async function changePassword(
+  payload: ChangePasswordPayload
+): Promise<void> {
+  await apiClient.patch("/auth/change-password", payload);
 }
