@@ -164,7 +164,7 @@ export function LandingPage() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <Link href="/reception/appointments" className="rounded-xl bg-[#0755d9] px-8 py-4 text-sm font-bold text-white shadow-md shadow-blue-200">Book Appointment</Link>
-              <Link href="/track/demo" className="rounded-xl border border-[#c5cadf] bg-white px-8 py-4 text-sm font-bold">Track Queue</Link>
+              <Link href="/track" className="rounded-xl border border-[#c5cadf] bg-white px-8 py-4 text-sm font-bold">Track Queue</Link>
               <Link href="/login" className="px-4 py-4 text-sm font-bold text-[#0755d9]">Staff Login</Link>
             </div>
           </div>
@@ -1184,7 +1184,7 @@ export function ReceptionDashboardPage() {
 
   const [form, setForm] = useState({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
 
   const resetForm = () => setForm({ patientName: "", age: "", gender: "male", phone: "", doctor: "", symptoms: "" });
 
@@ -1201,7 +1201,7 @@ export function ReceptionDashboardPage() {
         doctor: form.doctor,
         symptoms: form.symptoms,
       });
-      setSuccess(`Booked - token #${appointment.tokenNumber}, code ${appointment.appointmentCode}`);
+      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1243,7 +1243,12 @@ export function ReceptionDashboardPage() {
             </label>
             <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-32 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the patient's condition..." /></label>
             {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
-            {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+            {success && (
+              <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                Booked - token #{success.tokenNumber}, code {success.code}.{" "}
+                <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
+              </p>
+            )}
             <div className="md:col-span-2 flex justify-end gap-4">
               <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
               <Button type="submit" disabled={createAppointment.isPending} className="disabled:opacity-60">{createAppointment.isPending ? "Booking..." : "Book Patient Entry"}</Button>
@@ -1551,12 +1556,16 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
   const doctorId = user?.doctorId ?? null;
 
   const { data: queue } = useQueue(doctorId);
+  const { data: doctorAppointments = [] } = useAppointments(doctorId ?? undefined);
   const callNext = useCallNextPatient(doctorId);
   const completePatient = useCompletePatient(doctorId);
 
   const current = queue?.current ?? null;
   const waiting = queue?.waiting ?? [];
   const stats = queue?.stats;
+  const recentActivity = [...doctorAppointments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
 
   return (
     <DashboardShell role="doctor" active={active} searchPlaceholder="Search patient ID...">
@@ -1606,7 +1615,23 @@ export function DoctorDashboardPage({ active = "Dashboard" }: { active?: "Dashbo
         <Panel title="Patient Queue" action={<Button variant="secondary" disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">Call Next Patient</Button>}>
           {waiting.length === 0 ? <EmptyState label="No patients waiting." /> : <div className="space-y-4">{waiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>}
         </Panel>
-        <Panel title="Timeline"><EmptyState label="No recent activity." /></Panel>
+        <Panel title="Timeline">
+          {recentActivity.length === 0 ? (
+            <EmptyState label="No recent activity." />
+          ) : (
+            <div className="space-y-5">
+              {recentActivity.map((appointment) => (
+                <div key={appointment._id} className="flex gap-4">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${appointment.status === "completed" ? "bg-emerald-100 text-emerald-700" : appointment.status === "serving" ? "bg-blue-100 text-[#0755d9]" : "bg-orange-100 text-orange-700"}`}>✓</span>
+                  <div>
+                    <b>{appointment.status === "completed" ? `Completed: ${appointment.patientName}` : appointment.status === "serving" ? `In consultation: ${appointment.patientName}` : `Check-in: ${appointment.patientName}`}</b>
+                    <p className="text-sm text-slate-700">Token #{appointment.tokenNumber} - {appointment.symptoms}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
       </div>
     </DashboardShell>
   );
@@ -1623,7 +1648,7 @@ export function DoctorEmergencyIntakePage() {
     symptoms: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ tokenNumber: number; code: string } | null>(null);
 
   const resetForm = () => {
     setForm({ patientName: "", age: "", gender: "male", phone: "", symptoms: "" });
@@ -1648,7 +1673,7 @@ export function DoctorEmergencyIntakePage() {
         doctor: user.doctorId,
         symptoms: form.symptoms,
       });
-      setSuccess(`Emergency intake booked - token #${appointment.tokenNumber}, code ${appointment.appointmentCode}`);
+      setSuccess({ tokenNumber: appointment.tokenNumber, code: appointment.appointmentCode });
       resetForm();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1666,7 +1691,12 @@ export function DoctorEmergencyIntakePage() {
           <label className="block"><span className="font-bold">Phone Number</span><input required value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} className="mt-2 h-12 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] px-4" /></label>
           <label className="block md:col-span-2"><span className="font-bold">Symptoms & Primary Complaint</span><textarea required value={form.symptoms} onChange={(e) => setForm((p) => ({ ...p, symptoms: e.target.value }))} className="mt-2 h-36 w-full rounded-lg border border-[#c4c9dc] bg-[#fbfaff] p-4" placeholder="Brief description of the emergency condition..." /></label>
           {error && <p className="md:col-span-2 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>}
-          {success && <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{success}</p>}
+          {success && (
+            <p className="md:col-span-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+              Emergency intake booked - token #{success.tokenNumber}, code {success.code}.{" "}
+              <Link href={`/track/${success.code}`} className="underline" target="_blank">Open patient tracking link</Link>
+            </p>
+          )}
           <div className="md:col-span-2 flex justify-end gap-4">
             <Button type="button" variant="secondary" onClick={resetForm}>Clear Form</Button>
             <Button type="submit" disabled={createAppointment.isPending} className="disabled:opacity-60">{createAppointment.isPending ? "Booking..." : "Book Emergency Intake"}</Button>
@@ -1771,9 +1801,9 @@ export function DoctorPatientsPage() {
   );
 }
 
-export function PatientQueueTrackingPage() {
-  const [code, setCode] = useState("");
-  const [submittedCode, setSubmittedCode] = useState<string | null>(null);
+export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string } = {}) {
+  const [code, setCode] = useState(initialCode ?? "");
+  const [submittedCode, setSubmittedCode] = useState<string | null>(initialCode ?? null);
   const { data, isLoading, isError, error } = useTrackAppointment(submittedCode);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1789,8 +1819,7 @@ export function PatientQueueTrackingPage() {
       <header className="border-b border-[#c4c9dc]">
         <div className="mx-auto flex h-20 max-w-[1260px] items-center gap-10 px-6">
           <AppLogo compact />
-          <nav className="flex gap-10 text-xl"><Link href="/patient/dashboard">Dashboard</Link><Link href="/patient/queue" className="border-b-2 border-[#0755d9] pb-6 font-bold text-[#0755d9]">Queue</Link><Link href="/patient/appointments">Appointments</Link></nav>
-          <div className="ml-auto flex gap-5 text-[#0755d9]">! [] <Avatar className="h-10 w-10" /></div>
+          <span className="ml-auto text-lg font-bold text-[#0755d9]">Live Queue Tracking</span>
         </div>
       </header>
       <main className="mx-auto max-w-[1260px] px-6 py-8">
