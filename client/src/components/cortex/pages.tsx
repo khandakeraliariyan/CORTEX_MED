@@ -2,6 +2,7 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { isAxiosError } from "axios";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,7 +15,6 @@ import {
   EmptyState,
   Footer,
   HeatMap,
-  HeroIllustration,
   MetricCard,
   PageTitle,
   Panel,
@@ -65,82 +65,181 @@ function statusTone(status: Appointment["status"]): "blue" | "green" | "slate" |
 }
 
 export function LandingPage() {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthName = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(today);
+  const daysInMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0
+  ).getDate();
+  const calendarCells = [
+    ...Array.from({ length: monthStart.getDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+
   return (
-    <div className="min-h-screen bg-[#fbfaff] text-slate-950">
-      <header className="border-b border-[#d3d7e6]">
-        <div className="mx-auto flex h-16 max-w-[1260px] items-center gap-8 px-6">
-          <AppLogo compact />
-          <nav className="mx-auto hidden gap-10 text-sm md:flex">
-            <Link href="/" className="border-b-2 border-[#0755d9] pb-5 font-bold text-[#0755d9]">Home</Link>
+    <div className="min-h-screen bg-[#fbfaff] text-[#171721]">
+      <header className="sticky top-0 z-30 border-b border-[#d4d8ea] bg-[#fbfaff]/95 backdrop-blur">
+        <div className="mx-auto flex h-[66px] max-w-[1280px] items-center gap-10 px-7">
+          <Link href="/" className="text-[19px] font-black text-[#004bd1]">CortexMed</Link>
+          <nav className="mx-auto hidden h-full items-center gap-12 text-sm md:flex">
+            <Link href="/" className="flex h-full items-center border-b-2 border-[#0755d9] font-bold text-[#0755d9]">Home</Link>
             <Link href="#features">Features</Link>
             <Link href="#workflow">Workflow</Link>
             <Link href="#pricing">Pricing</Link>
           </nav>
-          <div className="ml-auto flex items-center gap-5 text-[#0755d9]">
-            <span>!</span>
-            <span>#</span>
-            <Avatar className="h-8 w-8" />
+          <div className="relative ml-auto flex items-center gap-6 text-[#0755d9]">
+            <button aria-label="Notifications" className="grid h-8 w-8 place-items-center">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </button>
+            <button aria-label="Calendar" onClick={() => setCalendarOpen((open) => !open)} className="grid h-8 w-8 place-items-center">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <path d="M16 2v4" />
+                <path d="M8 2v4" />
+                <path d="M3 10h18" />
+              </svg>
+            </button>
+            <Avatar name="CM" className="h-8 w-8" />
+            {calendarOpen && (
+              <div className="absolute right-8 top-11 z-40 w-[280px] rounded-2xl border border-[#c5cadf] bg-white p-5 text-[#171721] shadow-xl">
+                <div className="flex items-center justify-between">
+                  <b>{monthName}</b>
+                  <button aria-label="Close calendar" onClick={() => setCalendarOpen(false)} className="text-lg text-[#0755d9]">×</button>
+                </div>
+                <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase text-[#5d6373]">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}
+                </div>
+                <div className="mt-2 grid grid-cols-7 gap-1 text-center text-sm">
+                  {calendarCells.map((day, index) => (
+                    <span
+                      key={`${day ?? "blank"}-${index}`}
+                      className={`grid h-8 place-items-center rounded-lg ${day === today.getDate() ? "bg-[#0755d9] font-bold text-white" : day ? "text-[#171721] hover:bg-[#f0f1fb]" : ""}`}
+                    >
+                      {day}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1260px] px-6 py-12">
-        <section className="grid items-center gap-10 lg:grid-cols-[1fr_580px]">
+      <main className="mx-auto max-w-[1280px] px-7 py-11">
+        <section className="grid items-center gap-12 lg:grid-cols-[600px_1fr]">
           <div>
-            <span className="rounded-full bg-blue-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-[#0755d9]">
-              Next-gen triage
+            <span className="rounded-full bg-[#e8ebff] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#243067]">
+              ✤ Next-gen triage
             </span>
-            <h1 className="mt-7 max-w-[560px] text-5xl font-black leading-tight">
+            <h1 className="mt-7 max-w-[520px] text-[46px] font-black leading-[1.02] tracking-[-0.02em]">
               AI-Powered Smart Hospital Queue Management
             </h1>
-            <p className="mt-6 max-w-[620px] text-lg leading-8 text-slate-700">
-              Revolutionize patient experience with CortexMed. Our AI-driven engine predicts wait times and automates triage to prioritize critical cases instantly.
+            <p className="mt-6 max-w-[610px] text-base leading-7 text-[#5d6373]">
+              Revolutionize patient experience with CortexMed. Our AI-driven engine predicts wait times with 98% accuracy and automates triage to prioritize critical cases instantly.
             </p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link href="/reception/appointments"><Button>Book Appointment</Button></Link>
-              <Link href="/track/demo"><Button variant="secondary">Track Queue</Button></Link>
-              <Link href="/login" className="flex h-12 items-center px-4 text-sm font-bold text-[#0755d9]">Staff Login</Link>
+            <div className="mt-9 flex flex-wrap items-center gap-4">
+              <Link href="/reception/appointments" className="rounded-xl bg-[#0755d9] px-8 py-4 text-sm font-bold text-white shadow-md shadow-blue-200">Book Appointment</Link>
+              <Link href="/track/demo" className="rounded-xl border border-[#c5cadf] bg-white px-8 py-4 text-sm font-bold">Track Queue</Link>
+              <Link href="/login" className="px-4 py-4 text-sm font-bold text-[#0755d9]">Staff Login</Link>
             </div>
           </div>
-          <HeroIllustration />
+          <div className="rounded-[24px] border border-[#d7dbea] bg-white p-5 shadow-sm">
+            <Image src="/images/landing-hero.png" alt="CortexMed hospital queue dashboard illustration" width={960} height={540} priority className="h-[310px] w-full rounded-2xl object-cover" />
+          </div>
         </section>
 
-        <section id="features" className="mt-16">
+        <section id="features" className="mt-20">
           <div className="text-center">
-            <h2 className="text-3xl font-black">Intelligent Care Delivery</h2>
-            <p className="mt-3 text-slate-700">Optimizing every second of the patient journey using data-driven insights.</p>
+            <h2 className="text-[30px] font-black">Intelligent Care Delivery</h2>
+            <p className="mt-3 text-sm text-[#5d6373]">Optimizing every second of the patient journey using data-driven insights.</p>
           </div>
-          <div className="mt-8 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <Panel className="border-l-4 border-l-[#0755d9]">
-              <h3 className="text-2xl font-black">Advanced AI Triage</h3>
-              <p className="mt-4 max-w-[540px] leading-7 text-slate-700">
+          <div className="mt-9 grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <section className="rounded-[20px] border border-[#d7dbea] border-l-4 border-l-[#0755d9] bg-white p-9 shadow-sm">
+              <div className="text-2xl text-[#0755d9]">✙</div>
+              <h3 className="mt-5 text-2xl font-bold">Advanced AI Triage</h3>
+              <p className="mt-4 max-w-[560px] leading-7 text-[#5d6373]">
                 The clinical reasoning engine analyzes symptoms in real time to categorize urgency and move emergency cases ahead when it matters.
               </p>
-              <div className="mt-6 h-44 rounded-lg border border-[#c4c9dc] bg-[radial-gradient(circle_at_center,#7dd3fc,transparent_30%),linear-gradient(90deg,#eff6ff,#dbeafe)]" />
-            </Panel>
-            <Panel className="bg-emerald-50">
-              <h3 className="text-2xl font-black">Privacy First</h3>
-              <p className="mt-4 leading-7 text-slate-700">Encrypted patient operations with role based access and audit-ready workflows.</p>
-            </Panel>
+              <Image src="/images/ai-triage.png" alt="AI triage visualization" width={960} height={432} className="mt-7 h-[190px] w-full rounded-xl border border-[#c5cadf] object-cover" />
+            </section>
+            <section className="rounded-[20px] border border-[#d7dbea] bg-[#effcf9] p-9 shadow-sm">
+              <div className="text-2xl text-emerald-700">◉</div>
+              <h3 className="mt-8 text-xl font-bold">Privacy First</h3>
+              <p className="mt-5 leading-7 text-[#5d6373]">Fully HIPAA and GDPR compliant. Your data is encrypted end-to-end, ensuring zero-knowledge patient identity protection.</p>
+              <div className="mt-24 border-t border-emerald-100 pt-6"><span className="inline-block h-4 w-4 rounded-full bg-indigo-300" /> <span className="inline-block h-4 w-4 rounded-full bg-emerald-300" /> <span className="inline-block h-4 w-4 rounded-full bg-orange-200" /></div>
+            </section>
           </div>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <Panel><h3 className="text-xl font-black">Live Queue Tracking</h3><p className="mt-3 text-slate-700">Patients get real-time updates from their phone instead of waiting in a crowded lobby.</p></Panel>
-            <Panel><h3 className="text-xl font-black">Smart Wait Prediction</h3><p className="mt-3 text-slate-700">Historical traffic patterns and staff availability drive precise waiting intervals.</p></Panel>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_2fr]">
+            <section className="rounded-[20px] border border-[#d7dbea] bg-white p-9 shadow-sm">
+              <div className="text-2xl text-[#0755d9]">▣</div>
+              <h3 className="mt-8 text-xl font-bold">Live Queue Tracking</h3>
+              <p className="mt-5 leading-7 text-[#5d6373]">Patients receive real-time updates on their mobile devices, allowing them to wait in comfort instead of a crowded lobby.</p>
+            </section>
+            <section className="rounded-[20px] border border-[#d7dbea] border-r-4 border-r-[#c91414] bg-white p-9 shadow-sm">
+              <div className="grid gap-8 md:grid-cols-[1fr_380px]">
+                <div>
+                  <div className="text-2xl text-[#c91414]">⌁</div>
+                  <h3 className="mt-8 text-xl font-bold">Smart Wait Prediction</h3>
+                  <p className="mt-5 leading-7 text-[#5d6373]">Using historical traffic patterns and staff availability to provide precise waiting intervals with unparalleled accuracy.</p>
+                </div>
+                <div className="rounded-xl border border-[#c5cadf] bg-white p-7">
+                  <div className="flex h-32 items-end gap-4">
+                    {[35, 52, 75, 60, 42, 28].map((height, index) => <span key={index} className={`flex-1 rounded-t ${index === 3 ? "bg-[#0755d9]" : "bg-blue-200"}`} style={{ height: `${height}%` }} />)}
+                  </div>
+                  <div className="mt-3 flex justify-between text-xs text-[#5d6373]"><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span></div>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
 
-        <Panel title="Seamless Patient Flow" subtitle="A streamlined 4-step process for a better healthcare experience." className="mt-16" />
+        <section id="workflow" className="mt-16 rounded-[24px] border border-[#d7dbea] bg-white px-8 py-12 shadow-sm">
+          <div className="text-center">
+            <h2 className="text-[28px] font-black">Seamless Patient Flow</h2>
+            <p className="mt-2 text-sm text-[#5d6373]">A streamlined 4-step process for a better healthcare experience.</p>
+          </div>
+          <div className="relative mt-12 grid gap-8 md:grid-cols-4">
+            <div className="absolute left-8 right-8 top-8 hidden h-px bg-[#d7dbea] md:block" />
+            {[
+              ["▧", "Book Appointment", "Schedule via app or web portal in seconds."],
+              ["☻", "AI Prioritizes", "Symptoms analyzed to determine visit urgency."],
+              ["▥", "Track Queue Live", "Wait from anywhere with live countdowns."],
+              ["▣", "Meet Doctor", "Instant notification when your room is ready."],
+            ].map(([icon, title, copy], index) => (
+              <div key={title} className="relative text-center">
+                <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full border border-[#0755d9] bg-white text-2xl text-[#0755d9] ${index === 3 ? "bg-[#0755d9] text-white" : ""}`}>{icon}</div>
+                <h3 className="mt-5 font-bold">{title}</h3>
+                <p className="mx-auto mt-2 max-w-[170px] text-xs leading-5 text-[#5d6373]">{copy}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-        <section className="mt-16 rounded-xl bg-[#0755d9] px-6 py-16 text-center text-white">
+        <section id="pricing" className="mt-16 rounded-[20px] bg-[#2e69df] px-6 py-20 text-center text-white shadow-sm">
           <h2 className="text-3xl font-black">Ready to transform your hospital?</h2>
-          <p className="mx-auto mt-5 max-w-[620px] text-blue-100">Use CortexMed to reduce patient frustration and improve care coordination.</p>
-          <div className="mt-8 flex justify-center gap-4">
-            <Button variant="secondary">Get Started Today</Button>
-            <Button className="border-white/40 bg-transparent">Contact Sales</Button>
+          <p className="mx-auto mt-8 max-w-[650px] text-blue-100">Join 500+ clinics globally already using CortexMed to reduce patient frustration and improve medical outcomes.</p>
+          <div className="mt-9 flex justify-center gap-4">
+            <Link href={ROUTES.REGISTER} className="rounded-xl bg-white px-9 py-4 text-sm font-bold text-[#0755d9]">Get Started Today</Link>
+            <Link href="/login" className="rounded-xl border border-white/30 px-9 py-4 text-sm font-bold text-white">Contact Sales</Link>
           </div>
         </section>
       </main>
-      <Footer />
+
+      <footer className="mt-12 border-t border-[#d4d8ea] bg-[#dfe3ef] px-7 py-7">
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-5 text-sm text-[#5d6373] md:flex-row md:items-center md:justify-between">
+          <div><b className="block text-[#004bd1]">CortexMed</b>© 2024 CortexMed AI Hospital Systems. All rights reserved.</div>
+          <div className="flex flex-wrap gap-8"><span>About</span><span>Privacy Policy</span><span>Terms of Service</span><span>Compliance</span><span>Security</span><span>GitHub</span><span>Contact</span><span>◎</span><span>↗</span></div>
+        </div>
+      </footer>
     </div>
   );
 }
