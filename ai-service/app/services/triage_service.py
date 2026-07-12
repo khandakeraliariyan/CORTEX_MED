@@ -1,7 +1,7 @@
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.prompts import build_triage_prompt
-from app.models.llama import generate
+from app.providers.groq_provider import provider
 from app.schemas.response import TriageResponse
 from app.utils.parser import extract_json
 from app.utils.retry import retry_async
@@ -27,7 +27,7 @@ def _fallback_response() -> TriageResponse:
 
 
 async def _infer_once(prompt: str) -> TriageResponse:
-    raw_text = await generate(prompt)
+    raw_text = await provider.generate_triage(prompt)
     payload = extract_json(raw_text)
     validated = validate_triage_payload(payload)
     return TriageResponse(**validated)
