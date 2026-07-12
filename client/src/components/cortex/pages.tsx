@@ -1392,8 +1392,6 @@ function FrontDeskDashboardShell({
     { label: "Appointments", href: "/reception/appointments", icon: "▤" },
     { label: "Doctors", href: "/reception/doctors", icon: "▣" },
     { label: "Queue", href: "/reception/queue", icon: "◉" },
-    { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
-    { label: "Settings", href: "#", icon: "⚙" },
   ];
 
   return (
