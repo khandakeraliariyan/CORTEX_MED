@@ -95,6 +95,14 @@ Book appointments, run the live queue, and manage the doctor directory.
 |---|---|---|
 | ![Front desk appointments page](screenshots/FrontDesk_Appointment_page.jpg) | ![Front desk doctors page](screenshots/FrontDesk_Doctors_page.jpg) | ![Front desk queue page](screenshots/FrontDesk_Queue_Page.jpg) |
 
+### Patient
+
+Track their own appointment by code, no login required.
+
+| Live queue tracking |
+|---|
+| ![Patient live queue tracking](screenshots/Patient_Dashboard.png) |
+
 ## Quick start (Docker — all four services)
 
 **Prerequisites:** Docker Desktop (or Docker Engine + Compose v2 on Linux).
