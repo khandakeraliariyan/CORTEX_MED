@@ -47,6 +47,54 @@ only estimates urgency to help staff prioritize who is seen next.
 | `receptionist` | Self-registers | Book appointments, run the live queue, manage doctor directory |
 | Patient (anonymous) | No account | Track their own appointment by code, no login required |
 
+## Screenshots
+
+### Landing & authentication
+
+| Landing page | Login | Doctor registration | Receptionist registration |
+|---|---|---|---|
+| ![Landing page](screenshots/Landing_page.jpg) | ![Login page](screenshots/Login_Page.png) | ![Doctor registration](screenshots/Registration_Page%20for%20Doctors.png) | ![Receptionist registration](screenshots/Registration_Page_FrontDesk%20or%20Receiptionist.png) |
+
+### Administrator
+
+Manage doctors/staff, hospital settings, and view analytics.
+
+| Dashboard (1/2) | Dashboard (2/2) |
+|---|---|
+| ![Administrator dashboard first half](screenshots/Administrator_Dashboard_First-half.jpg) | ![Administrator dashboard second half](screenshots/Administrator_Dashboard_Second-half.jpg) |
+
+| Analytics | Appointments |
+|---|---|
+| ![Administrator analytics page](screenshots/Administrator_Analytics_page.jpg) | ![Administrator appointments page](screenshots/Administrator_Appointment_page.jpg) |
+
+| Doctors | Queue | Settings |
+|---|---|---|
+| ![Administrator doctors page](screenshots/Administrator_Doctors_page.jpg) | ![Administrator queue page](screenshots/Administrator_Queue_page.jpg) | ![Administrator settings page](screenshots/Administrator_settings_page.jpg) |
+
+### Doctor
+
+Own consultation queue and emergency intake.
+
+| Dashboard (1/2) | Dashboard (2/2) |
+|---|---|
+| ![Doctor dashboard first half](screenshots/Doctor_Dashboard_Firsthalf.jpg) | ![Doctor dashboard second half](screenshots/Doctor_Dashboard_Second_Half.jpg) |
+
+| History | Patient |
+|---|---|
+| ![Doctor history page](screenshots/Doctor_History_Page.jpg) | ![Doctor patient page](screenshots/Doctor_Patient_Page.jpg) |
+
+### Receptionist / Front desk
+
+Book appointments, run the live queue, and manage the doctor directory.
+
+| Dashboard (1/2) | Dashboard (2/2) |
+|---|---|
+| ![Front desk dashboard first half](screenshots/FrontDesk_Dashboard_First-half.jpg) | ![Front desk dashboard second half](screenshots/FrontDesk_Dashboard_Second-half.jpg) |
+
+| Appointments | Doctors | Queue |
+|---|---|---|
+| ![Front desk appointments page](screenshots/FrontDesk_Appointment_page.jpg) | ![Front desk doctors page](screenshots/FrontDesk_Doctors_page.jpg) | ![Front desk queue page](screenshots/FrontDesk_Queue_Page.jpg) |
+
 ## Quick start (Docker — all four services)
 
 **Prerequisites:** Docker Desktop (or Docker Engine + Compose v2 on Linux).
