@@ -16,7 +16,7 @@ CORTEX_MED is a polyglot monorepo made of four containerized services:
 |---|---|---|---|
 | Frontend | [`client/`](client/README.md) | Next.js 15, React 19, TypeScript, Tailwind CSS v4 | [client/README.md](client/README.md) |
 | Backend API | [`server/`](server/README.md) | Node.js, Express 5, MongoDB/Mongoose 9, Socket.IO | [server/README.md](server/README.md) |
-| AI Triage Engine | [`ai-service/`](ai-service/README.md) | Python, FastAPI, Ollama/vLLM (Llama 3.1) | [ai-service/README.md](ai-service/README.md) |
+| AI Triage Engine | [`ai-service/`](ai-service/README.md) | Python, FastAPI, Groq (Llama 3.1 8B Instant) | [ai-service/README.md](ai-service/README.md) |
 | Orchestration | [`docker/`](docker/README.md) | Docker Compose | [docker/README.md](docker/README.md) |
 
 Each service has its own README with full setup, API, and architecture details —
@@ -65,13 +65,11 @@ only estimates urgency to help staff prioritize who is seen next.
    (Docker Compose overrides `DATABASE_URL`, `CLIENT_URL`, and `AI_SERVICE_URL`
    to point at the containers automatically.)
 
-2. (Optional, for real AI triage instead of the neutral fallback) install
-   [Ollama](https://ollama.com) on the host and pull a model:
+2. (Optional, for real AI triage instead of the neutral fallback) create
+   `docker/.env` with a free [Groq](https://console.groq.com) API key:
    ```
-   ollama pull llama3.1:8b-instruct-q4_0
+   GROQ_API_KEY=your_key
    ```
-   For hackathon/demo hardware (e.g. AMD ROCm GPUs), point at a vLLM server
-   instead — see [`docker/README.md`](docker/README.md#switching-the-ai-backend-to-vllm--rocm-for-the-demo).
 
 3. Start everything:
    ```
