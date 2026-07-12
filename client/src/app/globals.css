@@ -23,6 +23,12 @@
   }
 }
 
+html {
+  /* Tailwind's text and spacing utilities are rem-based, so scaling the
+     root shrinks the oversized headings/metrics/paddings uniformly. */
+  font-size: 87.5%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
