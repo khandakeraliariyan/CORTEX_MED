@@ -2,6 +2,8 @@
 
 Backend API for **CORTEX_MED**, a hospital/clinic patient-queue and triage management system. It handles authentication, doctor management, appointment booking, AI-assisted patient triage, hospital-wide settings, and a live consultation queue that is broadcast to connected clients in real time over Socket.IO.
 
+> For a full endpoint-by-endpoint reference with example requests/responses, see **[API_DOCS.md](API_DOCS.md)**.
+
 ## Table of Contents
 
 - [Tech Stack](#tech-stack)
