@@ -31,6 +31,17 @@ app.add_middleware(
 app.include_router(triage_router)
 
 
+@app.get("/")
+async def root():
+    return {
+        "service": "Cortex AI Triage Engine",
+        "status": "online",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
     return {
