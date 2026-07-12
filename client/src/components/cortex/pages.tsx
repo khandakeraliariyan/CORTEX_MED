@@ -1995,8 +1995,6 @@ export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string
               <h2 className="text-xl">Estimated Wait</h2>
               <div className="mt-5 text-6xl font-black">{appointment?.status === "waiting" ? appointment.estimatedWait : "--"} <span className="text-3xl text-slate-300">MIN</span></div>
             </div>
-            <Panel title="Hospital Map"><div className="h-48 rounded-lg bg-gradient-to-br from-blue-100 to-slate-200" /><Button variant="secondary" className="mt-5 w-full">Open Navigation</Button></Panel>
-            <Panel title="Preparation"><EmptyState label="Preparation checklist will appear once your appointment is loaded." /></Panel>
           </div>
         </div>
       </main>
