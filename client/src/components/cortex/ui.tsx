@@ -72,9 +72,9 @@ type NavItem = {
 
 const adminNav: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: "[]" },
-  { label: "Appointments", href: "/reception/appointments", icon: "##" },
+  { label: "Appointments", href: "/admin/appointments", icon: "##" },
   { label: "Doctors", href: "/admin/staff", icon: "++" },
-  { label: "Queue", href: "/reception/queue", icon: "::" },
+  { label: "Queue", href: "/admin/queue", icon: "::" },
   { label: "Analytics", href: "/admin/analytics", icon: "||" },
   { label: "Settings", href: "/admin/settings", icon: "**" },
 ];
