@@ -35,6 +35,6 @@ app.include_router(triage_router)
 async def health() -> dict:
     return {
         "status": "ok",
-        "llm_backend": settings.llm_backend,
-        "llm_model": settings.llm_model,
+        "llm_backend": "groq",
+        "llm_model": settings.groq_model,
     }

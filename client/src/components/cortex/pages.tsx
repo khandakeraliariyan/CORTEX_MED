@@ -702,7 +702,7 @@ function matchesSearch(appointment: Appointment, term: string): boolean {
   );
 }
 
-export function AppointmentManagementPage() {
+export function AppointmentManagementPage({ role = "receptionist" }: { role?: "admin" | "receptionist" } = {}) {
   const { data: appointments = [], isLoading } = useAppointments();
   const [search, setSearch] = useState("");
 
@@ -719,7 +719,7 @@ export function AppointmentManagementPage() {
   const visibleAppointments = appointments.filter((a) => matchesSearch(a, search));
 
   return (
-    <DashboardShell role="receptionist" active="Appointments" searchPlaceholder="Search appointments, patients..." searchValue={search} onSearchChange={setSearch}>
+    <DashboardShell role={role} active="Appointments" searchPlaceholder="Search appointments, patients..." searchValue={search} onSearchChange={setSearch}>
       <PageTitle
         title="Appointment Management"
         subtitle="Real-time scheduling and patient flow optimization."
@@ -803,17 +803,11 @@ function AppointmentTable({ appointments }: { appointments: Appointment[] }) {
         ) : (
           rows.map((appointment) => (
             <div key={appointment._id} className="grid grid-cols-[1.25fr_1.15fr_.85fr_.7fr_1.1fr_.7fr_.35fr] items-center border-t border-[#d7dbea] px-6 py-5">
-              <div className="flex items-center gap-4">
-                <Avatar name={appointment.patientName} className="h-11 w-11 border-0 bg-[#eef0fb]" />
-                <div>
-                  <b>{appointment.patientName}</b>
-                  <p className="text-sm text-slate-600">ID: #{appointment.tokenNumber.toString().padStart(5, "0")}</p>
-                </div>
+              <div>
+                <b>{appointment.patientName}</b>
+                <p className="text-sm text-slate-600">ID: #{appointment.tokenNumber.toString().padStart(5, "0")}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <Avatar name={appointment.doctor?.user?.name ?? "Doctor"} className="h-8 w-8 border-0 grayscale" />
-                <span>{appointment.doctor?.user?.name ?? "Unassigned"}</span>
-              </div>
+              <span>{appointment.doctor?.user?.name ?? "Unassigned"}</span>
               <AppointmentPriority priority={appointment.priority} />
               <b className="text-[#0755d9]">A-{appointment.tokenNumber.toString().padStart(2, "0")}</b>
               <AppointmentStatus status={appointment.status} />
@@ -1398,8 +1392,6 @@ function FrontDeskDashboardShell({
     { label: "Appointments", href: "/reception/appointments", icon: "▤" },
     { label: "Doctors", href: "/reception/doctors", icon: "▣" },
     { label: "Queue", href: "/reception/queue", icon: "◉" },
-    { label: "Analytics", href: "/reception/dashboard", icon: "▥" },
-    { label: "Settings", href: "#", icon: "⚙" },
   ];
 
   return (
@@ -1580,7 +1572,8 @@ function LiveQueueCards({ patients }: { patients: Appointment[] }) {
   );
 }
 
-export function LiveQueuePage() {
+export function LiveQueuePage({ role = "receptionist" }: { role?: "admin" | "receptionist" } = {}) {
+  const canManageQueue = role !== "admin";
   const { data: doctors = [] } = useDoctors();
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const activeDoctorId = selectedDoctorId || doctors[0]?._id || "";
@@ -1600,7 +1593,7 @@ export function LiveQueuePage() {
   );
 
   return (
-    <DashboardShell role="receptionist" active="Queue" searchPlaceholder="Search patients or records...">
+    <DashboardShell role={role} active="Queue" searchPlaceholder="Search patients or records...">
       <PageTitle
         title="Emergency Care Queue"
         subtitle="Real-time patient flow."
@@ -1617,9 +1610,11 @@ export function LiveQueuePage() {
           <div className="grid gap-8 lg:grid-cols-[160px_1fr_260px]">
             <Avatar name={current.patientName} className="h-36 w-36 border-white bg-white text-[#0755d9]" />
             <div><StatusPill tone="blue">Current Session</StatusPill><h2 className="mt-4 text-5xl font-black">{current.patientName}</h2><div className="mt-6 grid gap-4 md:grid-cols-3"><b>{current.symptoms}</b><b>Priority P{current.priority}</b><b>Token #{current.tokenNumber}</b></div></div>
-            <div className="space-y-4">
-              <Button variant="secondary" disabled={completePatient.isPending} onClick={() => completePatient.mutate(current._id)} className="w-full disabled:opacity-60">{completePatient.isPending ? "Completing..." : "Mark Complete"}</Button>
-            </div>
+            {canManageQueue && (
+              <div className="space-y-4">
+                <Button variant="secondary" disabled={completePatient.isPending} onClick={() => completePatient.mutate(current._id)} className="w-full disabled:opacity-60">{completePatient.isPending ? "Completing..." : "Mark Complete"}</Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-6 text-center text-blue-50">No patient is currently in session.</div>
@@ -1629,7 +1624,9 @@ export function LiveQueuePage() {
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-2xl font-black">Next in Line <StatusPill tone="slate">{waiting.length} Remaining</StatusPill></h2>
-            <Button disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">{callNext.isPending ? "Calling..." : "Call Next Patient"}</Button>
+            {canManageQueue && (
+              <Button disabled={callNext.isPending || waiting.length === 0} onClick={() => callNext.mutate()} className="disabled:opacity-60">{callNext.isPending ? "Calling..." : "Call Next Patient"}</Button>
+            )}
           </div>
           <div className="space-y-4">{waiting.map((patient) => <QueueRow key={patient._id} appointment={patient} />)}</div>
           {waiting.length === 0 && <div className="mt-5"><EmptyState label="New arrivals will appear here in real-time..." /></div>}
@@ -1998,8 +1995,6 @@ export function PatientQueueTrackingPage({ initialCode }: { initialCode?: string
               <h2 className="text-xl">Estimated Wait</h2>
               <div className="mt-5 text-6xl font-black">{appointment?.status === "waiting" ? appointment.estimatedWait : "--"} <span className="text-3xl text-slate-300">MIN</span></div>
             </div>
-            <Panel title="Hospital Map"><div className="h-48 rounded-lg bg-gradient-to-br from-blue-100 to-slate-200" /><Button variant="secondary" className="mt-5 w-full">Open Navigation</Button></Panel>
-            <Panel title="Preparation"><EmptyState label="Preparation checklist will appear once your appointment is loaded." /></Panel>
           </div>
         </div>
       </main>

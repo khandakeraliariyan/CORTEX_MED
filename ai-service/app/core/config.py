@@ -9,11 +9,9 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: str = "*"
 
-    # LLM backend: "ollama" (dev) or "vllm" (AMD/ROCm hackathon demo).
-    # Both expose an OpenAI/Ollama-compatible HTTP API, so only base_url + model change.
-    llm_backend: str = "ollama"
-    llm_base_url: str = "http://localhost:11434"
-    llm_model: str = "llama3.1:8b-instruct-q4_0"
+    # Groq (https://groq.com) hosts the model - no local/self-hosted inference.
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
 
     # Inference behaviour. This runs synchronously in the booking flow, so
     # keep the worst case (timeout * attempts + backoff) well under the

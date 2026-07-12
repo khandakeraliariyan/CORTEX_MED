@@ -10,11 +10,12 @@ Engine (FastAPI), the Express backend, and the Next.js frontend.
   compose file reuses it and only overrides the infra URLs (`DATABASE_URL`,
   `CLIENT_URL`, `AI_SERVICE_URL`) so they point at the containers instead of
   `localhost`.
-- For real AI triage instead of the neutral fallback: either
-  - **Dev**: install [Ollama](https://ollama.com) on the host and run
-    `ollama pull llama3.1:8b-instruct-q4_0` - the `ai-service` container talks
-    to it over `host.docker.internal:11434` by default, or
-  - **Hackathon demo (AMD ROCm)**: point at a vLLM server instead (see below).
+- For real AI triage instead of the neutral fallback: create a
+  `docker/.env` file (compose auto-loads it) with a
+  [Groq](https://console.groq.com) API key:
+  ```
+  GROQ_API_KEY=your_key
+  ```
 
 ## Run it
 
@@ -29,21 +30,6 @@ docker compose -f docker/docker-compose.yml up --build
 
 Stop everything with `docker compose -f docker/docker-compose.yml down`
 (add `-v` to also drop the Mongo data volume).
-
-## Switching the AI backend to vLLM / ROCm for the demo
-
-Create a `docker/.env` file (compose auto-loads it for `${VAR}` substitution)
-so you don't have to edit `docker-compose.yml` itself:
-
-```
-LLM_BACKEND=vllm
-LLM_BASE_URL=http://<vllm-host>:8000
-LLM_MODEL=llama3.1:8b-instruct
-```
-
-Then re-run `docker compose -f docker/docker-compose.yml up --build`. No
-Express or frontend changes are needed - the `/triage` contract is identical
-either way.
 
 ## Notes
 

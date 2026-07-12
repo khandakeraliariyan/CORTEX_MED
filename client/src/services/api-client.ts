@@ -52,10 +52,15 @@ apiClient.interceptors.response.use(
       | undefined;
 
     const isUnauthorized = error.response?.status === 401;
+    // A 403 can mean the cached access token still carries a role that
+    // has since changed in the database (tokens are valid for 7 days but
+    // aren't reissued when a user's role is updated). Retrying once via
+    // the refresh flow re-reads the current role and self-heals that case.
+    const isStaleRoleForbidden = error.response?.status === 403;
     const isAuthRoute = originalRequest?.url?.includes("/auth/");
 
     if (
-      isUnauthorized &&
+      (isUnauthorized || isStaleRoleForbidden) &&
       originalRequest &&
       !originalRequest._retry &&
       !isAuthRoute &&

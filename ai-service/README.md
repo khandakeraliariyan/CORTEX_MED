@@ -18,8 +18,9 @@ ai-service/
 │   │   └── logging.py
 │   ├── services/
 │   │   └── triage_service.py  pre-processing -> prompt -> LLM -> parse -> validate -> fallback
-│   ├── models/
-│   │   └── llama.py           HTTP client for the LLM backend (Ollama or vLLM)
+│   ├── providers/
+│   │   ├── base.py            LLMProvider interface (generate_triage)
+│   │   └── groq_provider.py   Groq SDK implementation of LLMProvider
 │   ├── schemas/
 │   │   ├── request.py
 │   │   └── response.py
@@ -87,25 +88,21 @@ Copy `.env.example` to `.env` and adjust as needed:
 |---|---|---|
 | `PORT` | `8000` | Port the FastAPI service listens on |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |
-| `LLM_BACKEND` | `ollama` | `ollama` for local dev, `vllm` for the AMD/ROCm hackathon demo box |
-| `LLM_BASE_URL` | `http://localhost:11434` | Base URL of the LLM server |
-| `LLM_MODEL` | `llama3.1:8b-instruct-q4_0` | Model name/tag to request |
+| `GROQ_API_KEY` | *(required)* | API key from [console.groq.com](https://console.groq.com) |
+| `GROQ_MODEL` | `llama-3.1-8b-instant` | Model name to request from Groq |
 | `LLM_TIMEOUT_SECONDS` | `8` | Timeout for a single LLM call |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature — kept low for consistent, parseable JSON output |
-| `MAX_RETRIES` | `1` | Retries on LLM failure/unparseable output before falling back to the neutral response |
+| `MAX_RETRIES` | `2` | Retries on LLM failure/unparseable output before falling back to the neutral response |
 | `RETRY_BACKOFF_SECONDS` | `0.5` | Linear backoff between retries |
 
-## Running locally (Ollama)
+## Running locally
 
-1. Install [Ollama](https://ollama.com) and pull a model:
-   ```
-   ollama pull llama3.1:8b-instruct-q4_0
-   ```
+1. Get a free API key at [console.groq.com](https://console.groq.com).
 2. Install Python deps:
    ```
    pip install -r requirements.txt
    ```
-3. Copy `.env.example` to `.env` and adjust if needed.
+3. Copy `.env.example` to `.env` and set `GROQ_API_KEY`.
 4. Run the service:
    ```
    uvicorn main:app --reload --port 8000
@@ -114,20 +111,14 @@ Copy `.env.example` to `.env` and adjust as needed:
 The Express backend already expects this service at `http://localhost:8000/triage`
 (configurable via `AI_SERVICE_URL` in `server/.env`).
 
-## Switching to vLLM / ROCm for the hackathon demo
+## Swapping the LLM provider
 
-If AMD hardware is available, point the same service at a vLLM server instead
-of Ollama - the `/triage` contract does not change, so the Express backend
-needs no changes either:
-
-```
-LLM_BACKEND=vllm
-LLM_BASE_URL=http://<vllm-host>:8000
-LLM_MODEL=llama3.1:8b-instruct
-```
-
-`app/models/llama.py` already implements both the Ollama (`/api/generate`) and
-the OpenAI-compatible (`/v1/chat/completions`) request shapes vLLM exposes.
+The model is accessed only through `app/providers/groq_provider.py`, which
+implements the `LLMProvider` interface in `app/providers/base.py`
+(`generate_triage(prompt) -> str`). To use a different provider (Ollama,
+vLLM, OpenAI, ...) later, add a new class implementing that interface and
+point `app/services/triage_service.py`'s import at it - nothing in
+`services/`, `schemas/`, or `utils/` needs to change.
 
 ## Failure handling
 
@@ -156,9 +147,6 @@ service being down.
 docker build -t cortex-ai-triage .
 docker run -p 8000:8000 --env-file .env cortex-ai-triage
 ```
-
-Note: when Ollama runs on the host and this service runs in Docker, set
-`LLM_BASE_URL=http://host.docker.internal:11434`.
 
 ## Safety
 

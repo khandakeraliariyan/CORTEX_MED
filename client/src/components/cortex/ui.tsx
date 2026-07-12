@@ -72,9 +72,9 @@ type NavItem = {
 
 const adminNav: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: "[]" },
-  { label: "Appointments", href: "/reception/appointments", icon: "##" },
+  { label: "Appointments", href: "/admin/appointments", icon: "##" },
   { label: "Doctors", href: "/admin/staff", icon: "++" },
-  { label: "Queue", href: "/reception/queue", icon: "::" },
+  { label: "Queue", href: "/admin/queue", icon: "::" },
   { label: "Analytics", href: "/admin/analytics", icon: "||" },
   { label: "Settings", href: "/admin/settings", icon: "**" },
 ];
@@ -201,7 +201,7 @@ export function DashboardShell({
         </nav>
         <div className="p-4">
           <div className="mb-4 border-t border-[#c4c9dc] dark:border-slate-800" />
-          {role !== "doctor" && (
+          {role === "receptionist" && (
             <Link
               href="/reception/dashboard#book-appointment"
               className="mb-5 flex h-14 items-center justify-center gap-3 rounded-lg bg-[#0755d9] px-5 text-base font-bold text-white shadow-sm"
